@@ -158,7 +158,12 @@ def nlse(t, at, w0, gamma, betas, loss, fr=0.0, t1=0.0122, t2=0.032, flength=1, 
         AW[i] = AW[i] * exp(lin_operator.transpose()*z[i])  # change variables
         AT[i, :] = fft(AW[i])            # time domain output
         AW[i, :] = fftshift(AW[i])  
-        AW[i, :] = AW[i, :] * dt * n     # Original Dudley scaling factor
+        
+        # This is the original dudley scaling factor that I believe gives units
+        # of sqrt(J/Hz) for the AW array. Removing this gives units that agree
+        # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts)
+        # 
+        # AW[i, :] = AW[i, :] * dt * n     # Original Dudley scaling factor
     
     return z, AT, AW, (v + w0)/(2*np.pi)
 

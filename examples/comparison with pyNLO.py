@@ -10,7 +10,7 @@ EPP     = 50e-12 # Energy per pulse (J)
 GDD     = 0.0    # Group delay dispersion (ps^2)
 TOD     = 0.0    # Third order dispersion (ps^3)
 
-Window  = 10.0   # simulation window (ps)
+Window  = 7.0   # simulation window (ps)
 Steps   = 100     # simulation steps
 Points  = 2**12  # simulation points
 error   = 0.001
@@ -21,7 +21,7 @@ beta4   = 0.005    # (ps^4/km)
         
 Length  = .1    # length in mm
     
-Alpha   = 0.0     # attentuation coefficient (dB/cm)
+Alpha   = 0     # attentuation coefficient (dB/cm)
 Gamma   = 1000    # Gamma (1/(W km) 
     
 fibWL   = pulseWL # Center WL of fiber (nm)
@@ -76,9 +76,9 @@ dw = (w[1] - w[0])
 print(dw)
 print('energies: ')
 print(dt * np.trapz(abs(AT[-1])**2))
-print(dw * np.trapz(abs(AW[-1])**2))
-print(np.trapz(abs(AW[-1])**2)* dw/1e12)
-
+print(dw * np.trapz(abs(AW[-1])**2) * 1e-12)
+print(np.trapz(abs(AW[-1])**2) / (dw*1e12))
+# plt.show()
 
 
 # create the fiber!
