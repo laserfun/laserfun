@@ -9,7 +9,7 @@ import scipy.ndimage
 import time
 
 
-def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=200,
+def nlse(t, at, w0, gamma, betas, loss, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=200,
           atol=1e-4, rtol=1e-4, integrator='lsoda'):
     """
     This function propagates an optical input field (often a laser pulse)
@@ -88,24 +88,14 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
         The frequency grid (not angular freq).
     """
 
-    # loss should really be part of the fiber.
-    
-    t = pulse.T_ps
-    at = pulse.AT
-    w0 = pulse._get_center_frequency_THz()*2*np.pi  
-    gamma = fiber.get_gamma(0)
-
-
     n = t.size        # number of time/frequency points
     dt = t[1] - t[0]  # time step
     v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
     alpha = log10(10**(loss/10.))              # attenuation coefficient
 
-    # b = np.zeros_like(v)
-    # for i in range(len(betas)):        # Taylor expansion of GVD
-    #     b += betas[i]/factorial(i+2) * v**(i+2)
-    b = fiber.get_betas(pulse)
-
+    b = np.zeros_like(v)
+    for i in range(len(betas)):        # Taylor expansion of GVD
+        b += betas[i]/factorial(i+2) * v**(i+2)
 
     lin_operator = 1j*b - alpha*0.5        # linear operator
 

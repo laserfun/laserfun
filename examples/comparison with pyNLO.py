@@ -19,7 +19,7 @@ beta2   = -120     # (ps^2/km)
 beta3   = 0.00     # (ps^3/km)
 beta4   = 0.005    # (ps^4/km)
         
-Length  = .1    # length in mm
+Length  = 15    # length in mm
     
 Alpha   = 0     # attentuation coefficient (dB/cm)
 Gamma   = 1000    # Gamma (1/(W km) 
@@ -60,9 +60,17 @@ betas = [beta2*1e-3, beta3*1e-3, beta4*1e-3]
 at = np.copy(pulse.AT)
 t = pulse.T_ps
 
-t_start = time.time()
 
-z, AT, AW, w = nlse.NLSE.nlse(t, at, w0, Gamma*1e-3, betas, loss=Alpha*100, fr=0, flength=Length*1e-3, nsaves=Steps,
+# create the fiber!
+fiber1 = nlse.fiber.FiberInstance()
+fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, beta4),
+                              gamma_W_m=Gamma * 1e-3, gvd_units='ps^n/km', gain=-alpha)
+
+# z, AT, AW, w = nlse.NLSE.nlse(pulse, fiber, Gamma*1e-3, betas, loss=Alpha*100, fr=0, flength=Length*1e-3, nsaves=Steps,
+#                               atol=1e-5, rtol=1e-5, integrator='lsoda')
+t_start = time.time()
+z, AT, AW, w = nlse.NLSE.nlse(pulse, fiber1, 
+                              loss=Alpha*100, fr=0, flength=Length*1e-3, nsaves=Steps,
                               atol=1e-5, rtol=1e-5, integrator='lsoda')
 t_nlse = time.time() - t_start
 
@@ -80,11 +88,6 @@ print(dw * np.trapz(abs(AW[-1])**2) * 1e-12)
 print(np.trapz(abs(AW[-1])**2) / (dw*1e12))
 # plt.show()
 
-
-# create the fiber!
-fiber1 = pynlo.media.fibers.fiber.FiberInstance()
-fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, beta4),
-                              gamma_W_m=Gamma * 1e-3, gvd_units='ps^n/km', gain=-alpha)
 
 # Propagation
 t_start = time.time()

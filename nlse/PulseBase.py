@@ -1,31 +1,15 @@
 # -*- coding: utf-8 -*-
-#Created on Thu Jun 04 13:48:11 2015
-#This file is part of pyNLO.
-#
-#    pyNLO is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#
-#    pyNLO is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with pyNLO.  If not, see <http://www.gnu.org/licenses/>.
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import numpy as np
 from scipy.interpolate import interp1d
-from scipy import constants, signal 
+from scipy import constants
 from pynlo.util import FFT_t, IFFT_t
 import warnings
 import scipy.ndimage.interpolation
-
-import matplotlib.pyplot as plt # for testing. remove!
 
 class Pulse:
     """Class which carried all information about the light field. This class 
