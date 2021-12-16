@@ -105,8 +105,8 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     
     def load_fiber(fiber, z=0):
         # gets the fiber info from the fiber object
-        gamma = fiber.get_gamma(0)  # gamma should be in 1/(W m), not 1/(W km)
-        b = fiber.get_betas(pulse)
+        gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
+        b = fiber.get_betas(pulse, z)
         lin_operator = 1j*b - loss*0.5        # linear operator
 
         if np.nonzero(w0) and shock:          # if w0>0 then include shock
@@ -138,7 +138,7 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         nonlocal lin_operator, w, gamma  
         
         if reload_fiber:
-            lin_operator, w, gamma = load_fiber(fiber)
+            lin_operator, w, gamma = load_fiber(fiber, z)
             
         at = fft(aw * exp(lin_operator*z))    # time domain field
         it = np.abs(at)**2                    # time domain intensity
