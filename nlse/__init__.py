@@ -4,6 +4,6 @@ Created on Mon Jun 08 11:57:31 2015
 
 @author: ycasg
 """
-from . import DerivedPulses
+from . import pulse
 from . import fiber
 from . import NLSE

@@ -8,7 +8,7 @@ FWHM    = 0.050  # pulse duration (ps)
 pulseWL = 1550   # pulse central wavelength (nm)
 EPP     = 50e-12 # Energy per pulse (J)
 GDD     = 0.0    # Group delay dispersion (ps^2)
-TOD     = 0.0    # Third order dispersion (ps^3)
+TOD     = 0  # Third order dispersion (ps^3)
 
 Window  = 7.0   # simulation window (ps)
 Steps   = 100     # simulation steps
@@ -19,18 +19,17 @@ beta2   = -120     # (ps^2/km)
 beta3   = 0.00     # (ps^3/km)
 beta4   = 0.005    # (ps^4/km)
         
-Length  = 15    # length in mm
+Length  = 0.10    # length in mm
     
-Alpha   = 0     # attentuation coefficient (dB/cm)
+Alpha   = 0    # attentuation coefficient (dB/cm)
 Gamma   = 1000    # Gamma (1/(W km) 
     
 fibWL   = pulseWL # Center WL of fiber (nm)
     
-Raman   = False   # Enable Raman effect?
+Raman   = True   # Enable Raman effect?
 Steep   = True    # Enable self steepening?
 
 alpha = np.log((10**(Alpha * 0.1))) * 100  # convert from dB/cm to 1/m
-
 
 # set up plots for the results:
 fig = plt.figure(figsize=(8,8))
@@ -39,27 +38,18 @@ ax1 = plt.subplot2grid((3,2), (0, 1), rowspan=1)
 ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2)
 
-# create the pulse!
-pulse = nlse.DerivedPulses.SechPulse(power=1, # Power will be scaled by set_epp
-                                            T0_ps                   = FWHM/1.76, 
-                                            center_wavelength_nm    = pulseWL, 
-                                            time_window_ps          = Window,
-                                            GDD=GDD, TOD=TOD, 
-                                            NPTS            = Points, 
-                                            frep_MHz        = 100, 
-                                            power_is_avg    = False)
+# create the pulse
+pulse = nlse.pulse.SechPulse(power=1, T0_ps=FWHM/1.76, center_wavelength_nm=pulseWL, 
+                             time_window_ps=Window, GDD=GDD, TOD=TOD, NPTS= Points, 
+                             frep_MHz=100, power_is_avg=False)
 
-
-# set the pulse energy!
-pulse.set_epp(EPP) 
+pulse.set_epp(EPP)  # set the pulse energy
 
 # plot with simpleNLSE:
 c = 299792458*1e9/1e12      # speed of light [nm/ps]
 w0 = 2.0*np.pi*c/pulseWL
 betas = [beta2*1e-3, beta3*1e-3, beta4*1e-3]
 at = np.copy(pulse.AT)
-t = pulse.T_ps
-
 
 # create the fiber!
 fiber1 = nlse.fiber.FiberInstance()
@@ -70,8 +60,8 @@ fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, be
 #                               atol=1e-5, rtol=1e-5, integrator='lsoda')
 t_start = time.time()
 z, AT, AW, w = nlse.NLSE.nlse(pulse, fiber1, 
-                              loss=Alpha*100, fr=0, flength=Length*1e-3, nsaves=Steps,
-                              atol=1e-5, rtol=1e-5, integrator='lsoda')
+                              loss=alpha, raman=Raman, shock=Steep, flength=Length*1e-3, nsaves=Steps,
+                              atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=False)
 t_nlse = time.time() - t_start
 
 z = z * 1e3  # convert to mm 

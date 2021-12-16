@@ -1,16 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy import linspace, pi, log10, exp
-# from numpy.fft     import fft, ifft, fftshift  # Sometimes numpy is faster
-from scipy.fftpack import fft, ifft, fftshift    # but usually scipy is faster
 from scipy.special import factorial
 from scipy.integrate import complex_ode
 import scipy.ndimage
 import time
 
 
-def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=200,
-          atol=1e-4, rtol=1e-4, integrator='lsoda'):
+def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
+          atol=1e-4, rtol=1e-4, integrator='lsoda', fft_method='scipy', 
+          reload_fiber=False, print_status=True):
     """
     This function propagates an optical input field (often a laser pulse)
     through a nonlinear material using the generalized nonlinear
@@ -24,35 +23,21 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
     "Supercontinuum Generation in Optical Fibers" Edited by J. M. Dudley and
     J. R. Taylor (Cambridge 2010).
     The original Matlab code was written by J.C. Travers, M.H. Frosz and J.M.
-    Dudley (2009). They ask that you please cite this chapter in any
-    publication using this code.
+    Dudley (2009). They ask that you cite this chapter in any publications using
+    their code.
 
     2018-02-01 - First Python port by Dan Hickstein (danhickstein@gmail.com)
     2020-01-11 - General clean up and PEP8
+    2021-12-15 - Changed to accept pulse and fiber object inputs
 
     Parameters
     ----------
-    t : 1D numpy array of length n
-        The time grid in picoseconds. Should be evenly spaced.
-    at : 1D numpy array of length n
-        The temporal pulse envelope. Matches the time grid T. Can be complex.
-    w0 : float
-        The "carrier frequency" for the moving reference frame
-    gamma : float
-        The effective nonlinearity, in units of [1/(W m)].
-        note that the gammas for fibers are often described
-        in units of 1/(W km) (per kilometer rather than per meter).
-    betas : list of floats
-        the coefficients of the dispersion expansion.
-        Given as betas = [beta2, beta3, beta4, ...]
-        In units of [ps^2/m, ps^3/m, ps^4/m ...]
-        Note that this betas array is used to generate the b array.
-        Those who want to include an aibitrary dispersion could hack this
-        function and supply the b array. b is to so-called wavenumber
-        (often written as k) and is equal to
-        (refractive index)*2*pi/wavelength.
+    pulse : pulse object
+        This is the input pulse.
+    fiber : fiber object
+        This defines the media ("fiber") through which the pulse propagates. 
     loss : float
-        Loss in dB/m (check units...)
+        Loss in 1/m, not dB!
     fr : float
         Frequency domain raman. More info needed.
     rt : numpy array
@@ -74,6 +59,16 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
         things werereasonable with "method='bdf'"
         For more information, see:
         docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.ode.html
+    fft_method : string
+        Selects the fft method. 
+        Default is 'scipy', which uses scipy.fftpack. This is reliably quick 
+        on all systems that we've tested. 'numpy' uses numpy.fft, which 
+        uses fft functions that depend on the math library installed with python.
+        Anaconda Python generally uses the MKL math library, which is usually faster
+        than scipy.fftpack, but not by too much.
+    reload_fiber : boolean
+        This determines if the fiber information is reloaded at each step. This should be
+        set to True if the fiber properties (gamma, dispersion) vary as a function of length.
 
     Returns
     -------
@@ -87,58 +82,72 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
     w : 1D numpy array of length n
         The frequency grid (not angular freq).
     """
-
-    # loss should really be part of the fiber.
+          
+    if fft_method == 'numpy':    
+        from numpy.fft import fft, ifft, fftshift 
+    elif fft_method == 'scipy':
+        from scipy.fftpack import fft, ifft, fftshift
+    else:
+        raise valueError('fft method not supported.')
     
-    t = pulse.T_ps
-    at = pulse.AT
-    w0 = pulse._get_center_frequency_THz()*2*np.pi  
-    gamma = fiber.get_gamma(0)
-
-
+    # get the pulse info from the pulse object:
+    t = pulse.T_ps  #  time array in picoseconds
+    at = pulse.AT   #  amplitude for those times in sqrt(W)
+    w0 = pulse._get_center_frequency_THz()*2*np.pi  # center freq (angular!)
+    
     n = t.size        # number of time/frequency points
     dt = t[1] - t[0]  # time step
     v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
-    alpha = log10(10**(loss/10.))              # attenuation coefficient
+    
+    def load_fiber(fiber, z=0):
+        # gets the fiber info from the fiber object
+        gamma = fiber.get_gamma(0)  # gamma should be in 1/(W m), not 1/(W km)
+        b = fiber.get_betas(pulse)
+        lin_operator = 1j*b - loss*0.5        # linear operator
 
-    # b = np.zeros_like(v)
-    # for i in range(len(betas)):        # Taylor expansion of GVD
-    #     b += betas[i]/factorial(i+2) * v**(i+2)
-    b = fiber.get_betas(pulse)
-
-
-    lin_operator = 1j*b - alpha*0.5        # linear operator
-
-    if np.nonzero(w0):          # if w0>0 then include shock
-        gamma = gamma/w0
-        w = v + w0              # for shock w is true freq
-    else:
-        w = 1                   # set w to 1 when no shock
+        if np.nonzero(w0) and shock:          # if w0>0 then include shock
+            gamma = gamma/w0
+            w = v + w0              # for shock w is true freq
+        else:
+            w = 1 + v*0             # set w to 1 when no shock
+    
+        # shift to fft space  -- Back to time domain, right?
+        lin_operator = fftshift(lin_operator)
+        w = fftshift(w)
+        return lin_operator, w, gamma
+    
+    lin_operator, w, gamma = load_fiber(fiber)
 
     # Raman response:
-    rt = (t1**2+t2**2)/t1/t2**2*np.exp(-t/t2)*np.sin(t/t1)
-    rt[t < 0] = 0           # heaviside step function
-    
-    rw = n * ifft(fftshift(rt))      # frequency domain Raman
-
-    # shift to fft space  -- Back to time domain, right?
-    lin_operator = fftshift(lin_operator)
-    w = fftshift(w)
-
+    if raman == 'dudley' or raman == True:
+        fr  =0.18; t1 = 0.0122; t2 = 0.032
+        rt = (t1**2+t2**2)/t1/t2**2*np.exp(-t/t2)*np.sin(t/t1)
+        rt[t < 0] = 0           # heaviside step function
+        rw = n * ifft(fftshift(rt))      # frequency domain Raman
+    elif raman == False:
+        fr = 0
+    else:
+        raise ValueError('Raman method not supported')
+        
     # define function to return the RHS of Eq. (3.13):
     def rhs(z, aw):
-        at = fft(aw * exp(lin_operator*z))               # time domain field
+        nonlocal lin_operator, w, gamma  
+        
+        if reload_fiber:
+            lin_operator, w, gamma = load_fiber(fiber)
+            
+        at = fft(aw * exp(lin_operator*z))    # time domain field
         it = np.abs(at)**2                    # time domain intensity
 
-        if rt.size == 1 or np.isclose(fr, 0):  # no Raman case
+        if np.isclose(fr, 0):  # no Raman case
             m = ifft(at*it)                    # response function
         else:
-            print('raman')
             rs = dt * fr * fft(ifft(it) * rw)     # Raman convolution
             m = ifft(at*((1-fr)*it + rs))         # response function
 
         r = 1j * gamma * w * m * exp(-lin_operator*z)  # full RHS of Eq. (3.13)
         return r
+
 
     z = linspace(0, flength, nsaves)    # select output z points
 
@@ -154,11 +163,12 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
     start_time = time.time()  # start the timer
 
     for count, zi in enumerate(z[1:]):
-        print('% 6.1f%% complete - %.1f seconds' % ((zi/z[-1])*100,
-                                                    time.time()-start_time))
+
+        if print_status:
+            print('% 6.1f%% complete - %.1e m - %.1f seconds' % ((zi/z[-1])*100, zi,
+                                                        time.time()-start_time))
         if not r.successful():
-            print('integrator failed!')
-            break
+            raise Exception('Integrator failed! Check the input parameters.')
 
         AW[count+1] = r.integrate(zi)
 
@@ -171,88 +181,10 @@ def nlse(pulse, fiber, loss=0, fr=0.0, t1=0.0122, t2=0.032, flength=1, nsaves=20
         
         # This is the original dudley scaling factor that I believe gives units
         # of sqrt(J/Hz) for the AW array. Removing this gives units that agree
-        # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts)
-        # 
-        # AW[i, :] = AW[i, :] * dt * n     # Original Dudley scaling factor
+        # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts) -DH 2021-12-15
+        
+        # AW[i, :] = AW[i, :] * dt * n  
     
     return z, AT, AW, (v + w0)/(2*np.pi)
 
 
-def test():
-    """
-    This function demonstrates how to call the gnlse function.
-    This simulations demonstrates supercontinuum generation in an optical fiber
-    using parameters similar to
-    to Fig.3 of Dudley et. al, RMP 78 1135 (2006)
-    """
-
-    # simulation parameters:
-    n = 2**13                   # number of grid points
-    twidth = 12.5               # width of time window [ps]
-    c = 299792458*1e9/1e12      # speed of light [nm/ps]
-    wavelength = 835            # reference wavelength [nm]
-    w0 = 2.0*pi*c/wavelength    # reference frequency [2*pi*THz]
-    t = np.linspace(-twidth*0.5, twidth*0.5, n)  # time grid
-    nsaves = 200                # number of length steps to save field at
-
-    # input pulse parameters:
-    power = 10000              # peak power of input [W]
-    t0 = 0.0284                # duration of input [ps]
-    at = np.sqrt(power)/np.cosh(t/t0)  # input field [W^(1/2)]
-    
-    # fiber parameters:
-    flength = 0.15             # fibre length [m]
-    flength = 0.001          # fibre length [m]
-
-
-    # betas = [beta2, beta3, ...] in units [ps^2/m, ps^3/m ...]
-    betas = [-11.830e-3, 8.1038e-5, -9.5205e-8, 2.0737e-10,
-             -5.3943e-13, 1.3486e-15, -2.5495e-18, 3.0524e-21, -1.7140e-24]
-
-    gamma = 0.11               # nonlinear coefficient [1/W/m]
-    loss = 0                   # loss [dB/m]
-
-    # propagate!
-    z, AT, AW, w = nlse(t, at, w0, gamma, betas, loss=loss,
-                         flength=flength, nsaves=nsaves)
-
-    IW_dB = 10*log10(np.abs(AW)**2)  # log scale spectral intensity
-    new_wls = np.linspace(400, 1350, 400)
-
-    NEW_WLS, NEW_Z = np.meshgrid(new_wls, z)
-    NEW_W = 2*pi*c/NEW_WLS
-
-    # fast interpolation to wavelength grid,
-    # so that we can plot using imshow for fast viewing:
-    IW_WL = scipy.ndimage.interpolation.map_coordinates(
-        np.abs(AW)**2, ((NEW_Z-np.min(z))/(z[1]-z[0]),
-                        (NEW_W-np.min(w))/(w[1]-w[0])),
-        order=1, mode='nearest')
-
-    IW_dB = 10*np.log10(IW_WL)
-    IT_dB = 10*np.log10(np.abs(AT)**2)
-
-    fig, axs = plt.subplots(1, 2, figsize=(8, 5), tight_layout='True')
-
-    axs[0].imshow(IW_dB, aspect='auto', origin='lower',
-                  extent=(new_wls.min(), new_wls.max(), z.min(), z.max()),
-                  clim=(-50, 0), cmap='jet')
-
-    axs[1].imshow(IT_dB, aspect='auto', origin='lower',
-                  extent=(t.min(), t.max(), z.min(), z.max()),
-                  clim=(-50, 0), cmap='jet')
-
-    axs[0].set_xlabel('Wavelength (nm)')
-    axs[0].set_ylabel('Propagation length (meters)')
-
-    axs[1].set_xlim(-0.5, 5)
-    axs[1].set_xlabel('Time (ps)')
-
-    plt.savefig('Dudley comparison.png', dpi=200)
-    plt.show()
-    
-
-
-
-if __name__ == '__main__':
-    test()
