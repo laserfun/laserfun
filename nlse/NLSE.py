@@ -3,8 +3,12 @@ import matplotlib.pyplot as plt
 from numpy import linspace, pi, log10, exp
 from scipy.special import factorial
 from scipy.integrate import complex_ode
+from scipy import constants
 import scipy.ndimage
 import time
+
+c = constants.value('speed of light in vacuum')*1e9/1e12 # c in nm/ps
+
 
 
 def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
@@ -185,6 +189,67 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         
         # AW[i, :] = AW[i, :] * dt * n  
     
-    return z, AT, AW, (v + w0)/(2*np.pi)
+    res = PulseData(z, AT, AW, (v + w0)/(2*np.pi), pulse, fiber)
+    
+    return res
 
+class PulseData:
+    
+    def __init__(self, z, AT, AW, f, pulse, fiber):
+        self.z = z
+        self.AW = AW
+        self.AT = AT
+        self.f = f
+        self.pulse_in = pulse
+        self.fiber = fiber
+        
+    def get_results(self):
+        return self.z, self.AT, self.AW, self.f
+    
+    def get_amplitude_wavelengths(self, wavemin=None, wavemax=None, waven=None, jacobian=False):
+        '''
+        Re-interpolates the AW array from evenly-spaced frequencies to 
+        evenly-spaced wavelengths. 
+        
+        Parameters
+        ----------
+        wavemin : float or None
+            the minimum wavelength for the re-interpolation grid.
+            If None, it defaults to 0.25x the center wavelength of the pulse.
+            If a float, this is the minimum wavelength of the pulse in nm
+        wavemax : float or None
+            the minimum wavelength for the re-interpolation grid.
+            If None, it defaults to 4x the center wavelength of the pulse.
+            If a float, this is the maximum wavelength of the pulse in nm
+        waven : int or None
+            number of wavelengths for the re-interpolation grid.
+            If None, it defaults to the number of points in AW multiplied by 2
+            If an int, then this is just the number of points.
+        '''
+        
+        if wavemin == None:
+            wavemin = 0.25 * c/self.pulse_in._get_center_frequency_THz()
+        if wavemax == None:
+            wavemax = 4.0 * c/self.pulse_in._get_center_frequency_THz()
+        if waven== None:
+            waven = self.AW.shape[1] * 2
+        
+        print('Waven: %i'%waven)
+        
+        IW_dB = 10*log10(np.abs(self.AW)**2)  # log scale spectral intensity
+        new_wls = np.linspace(wavemin, wavemax, waven)
+
+        NEW_WLS, NEW_Z = np.meshgrid(new_wls, self.z)
+        NEW_F = c/NEW_WLS
+
+        # fast interpolation to wavelength grid,
+        # so that we can plot using imshow for fast viewing:
+        # This requires Scipy > 1.6.0
+        AW_WL = scipy.ndimage.interpolation.map_coordinates(
+                    np.abs(self.AW)**2, ((NEW_Z-np.min(self.z))/(self.z[1]-self.z[0]),
+                         (NEW_F-np.min(self.f))/(self.f[1]-self.f[0])),
+                    order=1, mode='nearest')
+        return new_wls, AW_WL
+        
+    
 
