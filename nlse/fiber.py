@@ -8,8 +8,10 @@ import scipy.interpolate
 from scipy.special import factorial
 from scipy import constants
 from scipy.optimize import minimize
-from pynlo.media.fibers.calculators import DTabulationToBetas
-from pynlo.util.pynlo_ffts import IFFT_t
+
+
+def IFFT_t(A,ax=0):
+    return fft.ifftshift(fft.fft(fft.fftshift(A,axes=(ax,)),axis=ax),axes=(ax,)) 
 
 
 class FiberInstance:
@@ -139,7 +141,6 @@ class FiberInstance:
         return gamma
 
 
-
     def get_betas(self, pulse, z=0):
         """This provides the propagation constant (beta) at the frequencies of the supplied pulse grid.
         The units are 1/meters.
@@ -215,8 +216,6 @@ class FiberInstance:
             interpolator = scipy.interpolate.InterpolatedUnivariateSpline(supplied_W_THz[::-1], supplied_betas[::-1])
             B = interpolator(pulse.W_THz)
 
-
-
         # in the case of "GVD" or "n" it's possible (likely) that the betas will not be zero and have zero
         # slope at the pulse central frequency. For the NLSE, we need to move into a frame propagating at the
         # same group velocity, so we need to set the value and slope of beta at the pulse wavelength to zero:
@@ -232,7 +231,7 @@ class FiberInstance:
             return -1
 
 
-    def get_gain(self,pulse,output_power = 1):
+    def get_gain(self, pulse, output_power=1):
         """ Retrieve gain spectrum for fiber. If fiber has 'simple gain', this
         is a scalar. If the fiber has a gain spectrum (eg EDF or YDF), this will
         return this spectrum as a vector corresponding to the Pulse class
@@ -261,12 +260,7 @@ class FiberInstance:
                                                 )**2))
 
                     scale_factor = minimize(g, 1, method='Powell')
-#                    print 'Power:',pulse.frep * pulse.dt_seconds*\
-#                                        np.trapz(np.abs(
-#                                            IFFT_t( FFT_t(pulse.A) *
-#                                                np.exp(scale_factor.x*gain_spec*self.length/2.0)
-#                                                )
-#                                                )**2)
+
                     return gain_spec * scale_factor.x
                 else:
                     return np.ones((pulse.NPTS,)) * self.gain
@@ -286,9 +280,8 @@ class FiberInstance:
         return out
 
 
-
-    def generate_fiber(self, length, center_wl_nm, betas, gamma_W_m, gain = 0,
-                       gvd_units = 'ps^n/m', label = 'Simple Fiber'):
+    def generate_fiber(self, length=0.1, center_wl_nm=1550, betas=[0], gamma_W_m=0, gain=0,
+                       gvd_units = 'ps^n/m', label = 'fiber0'):
         """ This generates a fiber instance using the beta-coefficients."""
 
         self.length = length
@@ -309,3 +302,48 @@ class FiberInstance:
         # If in km^-1 units, scale to m^-1
         if gvd_units == 'ps^n/km':
             self.betas = self.betas * 1.0e-3
+            
+
+def DTabulationToBetas(lambda0, DData, polyOrder=5, return_diagnostics=False, makeplots=False):
+    """ Read in a tabulation of D vs Lambda. Returns betas in array 
+    [beta2, beta3, ...]. If return_diagnostics is True, then return
+    (betas, fit_x_axis (omega in THz), data (ps^2), fit (ps^2) ) """
+        
+    DTab = DData[:]
+            
+    # Units of D are ps/nm/km
+    # Convert to s/m/m 
+    DTab[:,1] = DTab[:,1] * 1e-12 * 1e9 * 1e-3
+    
+    c = constants.speed_of_light
+    
+    omegaAxis = 2*np.pi*c  / (DTab[:,0]*1e-9) - 2*np.pi*c  /(lambda0 * 1e-9)
+    # Convert from D to beta via  beta2 = -D * lambda^2 / (2*pi*c) 
+    
+    betaTwo = -DTab[:,1] * (DTab[:,0]*1e-9)**2 / (2*np.pi*c) 
+    # The units of beta2 for the GNLSE solver are ps^2/m; convert
+    betaTwo = betaTwo * 1e24
+    # Also convert angular frequency to rad/ps
+    omegaAxis = omegaAxis * 1e-12 #  s/ps
+    
+    # Fit beta2 with high-order polynomial
+    polyFitCo = np.polyfit(omegaAxis, betaTwo, polyOrder)
+    
+    Betas = polyFitCo[::-1]
+    
+    polyFit = np.zeros((len(omegaAxis),))   
+
+    for i in range(len(Betas)):
+        Betas[i] = Betas[i] * factorial(i)
+        polyFit = polyFit + Betas[i] / factorial(i)*omegaAxis**i
+    
+    if makePlots:      
+        plt.plot(omegaAxis, betaTwo,'o')
+        plt.plot(omegaAxis, polyFit)
+        plt.show()
+        
+    if return_diagnostics:
+        return Betas, omegaAxis, betaTwo, polyFit
+        
+    else:
+        return Betas
