@@ -22,6 +22,7 @@ class FiberInstance:
     fiberspecs  = {}
     poly_order  = None
     gamma       = None
+    alpha       = None
     def __init__(self, fiber_db = 'general_fibers',
                        fiber_db_dir = None):
         self.c_mks = constants.speed_of_light
@@ -29,35 +30,31 @@ class FiberInstance:
         self.is_simple_fiber = False
         self.dispersion_changes_with_z = False
         self.gamma_changes_with_z = False
+        
+    
+    def generate_fiber(self, length=0.1, center_wl_nm=1550, betas=[0], 
+                       gamma_W_m=0, gain=0, gvd_units = 'ps^n/m', label = 'fiber0'):
+        """ This generates a fiber instance using the beta-coefficients."""
 
-    def load_from_file(self, filename, length=0.1, fiberName=None, gamma_W_m=0, gain=0,
-                       alpha=0, delimiter=',', skiprows=0, poly_order=3):
-        """
-        This loads dispersion give the path of a file.
-        The file is expected to be in the format
-        wavelength (nm), D (ps/nm/km).
-        """
-        import os
-
-        if fiberName == None:
-            self.fibertype = os.path.basename(filename)
-        else:
-            self.fibertype = fiberName
-
-        self.fiberspecs["dispersion_format"] = "D"
-        self.poly_order = poly_order
-        self.gain       = gain
-        self.length     = length
-        self.gamma      = gamma_W_m
-
+        self.length = length
+        self.fiberspecs= {}
+        self.fiberspecs['dispersion_format'] = 'GVD'
+        self.fibertype = label
         if gain == 0:
             self.fiberspecs["is_gain"] = False
         else:
             self.fiberspecs["is_gain"] = True
-
+        self.gain = gain
+        # The following line signals get_gain to use a flat gain spectrum
         self.fiberspecs['gain_x_data' ] = None
 
-        self.x, self.y = np.loadtxt(filename, delimiter=delimiter, skiprows=skiprows, unpack=True)
+        self.center_wavelength = center_wl_nm
+        self.betas = np.copy(np.array(betas))
+        self.gamma = gamma_W_m
+        # If in km^-1 units, scale to m^-1
+        if gvd_units == 'ps^n/km':
+            self.betas = self.betas * 1.0e-3
+
 
     def set_dispersion_function(self, dispersion_function, dispersion_format='GVD'):
         """
@@ -68,7 +65,8 @@ class FiberInstance:
         Parameters
         ----------
         dispersion_function : function
-            returning D or Beta coefficients as a function of z
+            A function returning D or Beta coefficients as a function of z.
+            z should be in meters.
         dispersion_formats: 'GVD' or 'D' or 'n'
             determines if the dispersion will be identified in terms of Beta coefficients
             (GVD, in units of ps^2/m, not ps^2/km) or
@@ -106,14 +104,15 @@ class FiberInstance:
 
     def set_gamma_function(self, gamma_function):
         """
-        This allows the user to provide a function for gamma (the effective nonlinearity, in units
-        of 1/(Watts * meters)) that
+        This allows the user to provide a function for gamma (the effective 
+        nonlinearity), in units of 1/(Watts * meters)) that
         can vary as a function of `z`, the length along the fiber.
 
         Parameters
         ----------
         gamma_function : function
-            returning gamma function of z
+            a function returning gamma as a function of z. z should be in
+            units of meters.
 
         """
         self.gamma_function = gamma_function
@@ -141,9 +140,9 @@ class FiberInstance:
         return gamma
 
 
-    def get_betas(self, pulse, z=0):
-        """This provides the propagation constant (beta) at the frequencies of the supplied pulse grid.
-        The units are 1/meters.
+    def get_B(self, pulse, z=0):
+        """This provides the propagation constant (beta) at the frequencies of
+        the supplied pulse grid. The units are 1/meters.
 
         Three different methods are used,
 
@@ -166,6 +165,12 @@ class FiberInstance:
         ----------
         pulse : an instance of the :class:`pynlo.light.pulse.PulseBase` class
             the pulse must be supplied in order for the frequency grid to be known
+        
+        z : float
+            the postion along the length of the fiber. The units of this must 
+            match the units expected by the functions provided to 
+            set_dispersion_function() and set_gamma_function(). Should stick 
+            to meters.
 
 
         Returns
@@ -278,31 +283,6 @@ class FiberInstance:
         out = np.append(out[0], out)
         out = np.append(out, out[-1])
         return out
-
-
-    def generate_fiber(self, length=0.1, center_wl_nm=1550, betas=[0], gamma_W_m=0, gain=0,
-                       gvd_units = 'ps^n/m', label = 'fiber0'):
-        """ This generates a fiber instance using the beta-coefficients."""
-
-        self.length = length
-        self.fiberspecs= {}
-        self.fiberspecs['dispersion_format'] = 'GVD'
-        self.fibertype = label
-        if gain == 0:
-            self.fiberspecs["is_gain"] = False
-        else:
-            self.fiberspecs["is_gain"] = True
-        self.gain = gain
-        # The following line signals get_gain to use a flat gain spectrum
-        self.fiberspecs['gain_x_data' ] = None
-
-        self.center_wavelength = center_wl_nm
-        self.betas = np.copy(np.array(betas))
-        self.gamma = gamma_W_m
-        # If in km^-1 units, scale to m^-1
-        if gvd_units == 'ps^n/km':
-            self.betas = self.betas * 1.0e-3
-            
 
 def DTabulationToBetas(lambda0, DData, polyOrder=5, return_diagnostics=False, makeplots=False):
     """ Read in a tabulation of D vs Lambda. Returns betas in array 

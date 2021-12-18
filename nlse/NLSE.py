@@ -7,12 +7,8 @@ from scipy import constants
 import scipy.ndimage
 import time
 
-c = constants.value('speed of light in vacuum')*1e9/1e12 # c in nm/ps
-
-
-
 def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
-          atol=1e-4, rtol=1e-4, integrator='lsoda', fft_method='scipy', 
+          atol=1e-4, rtol=1e-4, integrator='lsoda', fft_method='scipy',
           reload_fiber=False, print_status=True):
     """
     This function propagates an optical input field (often a laser pulse)
@@ -39,7 +35,7 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     pulse : pulse object
         This is the input pulse.
     fiber : fiber object
-        This defines the media ("fiber") through which the pulse propagates. 
+        This defines the media ("fiber") through which the pulse propagates.
     loss : float
         Loss in 1/m, not dB!
     fr : float
@@ -64,9 +60,9 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         For more information, see:
         docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.ode.html
     fft_method : string
-        Selects the fft method. 
-        Default is 'scipy', which uses scipy.fftpack. This is reliably quick 
-        on all systems that we've tested. 'numpy' uses numpy.fft, which 
+        Selects the fft method.
+        Default is 'scipy', which uses scipy.fftpack. This is reliably quick
+        on all systems that we've tested. 'numpy' uses numpy.fft, which
         uses fft functions that depend on the math library installed with python.
         Anaconda Python generally uses the MKL math library, which is usually faster
         than scipy.fftpack, but not by too much.
@@ -86,27 +82,27 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     w : 1D numpy array of length n
         The frequency grid (not angular freq).
     """
-          
-    if fft_method == 'numpy':    
-        from numpy.fft import fft, ifft, fftshift 
+
+    if fft_method == 'numpy':
+        from numpy.fft import fft, ifft, fftshift
     elif fft_method == 'scipy':
         from scipy.fftpack import fft, ifft, fftshift
     else:
         raise valueError('fft method not supported.')
-    
+
     # get the pulse info from the pulse object:
     t = pulse.T_ps  #  time array in picoseconds
     at = pulse.AT   #  amplitude for those times in sqrt(W)
     w0 = pulse._get_center_frequency_THz()*2*np.pi  # center freq (angular!)
-    
+
     n = t.size        # number of time/frequency points
     dt = t[1] - t[0]  # time step
     v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
-    
+
     def load_fiber(fiber, z=0):
         # gets the fiber info from the fiber object
-        gamma = fiber.get_gamma(0)  # gamma should be in 1/(W m), not 1/(W km)
-        b = fiber.get_betas(pulse)
+        gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
+        b = fiber.get_B(pulse, z)
         lin_operator = 1j*b - loss*0.5        # linear operator
 
         if np.nonzero(w0) and shock:          # if w0>0 then include shock
@@ -114,12 +110,12 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
             w = v + w0              # for shock w is true freq
         else:
             w = 1 + v*0             # set w to 1 when no shock
-    
+
         # shift to fft space  -- Back to time domain, right?
         lin_operator = fftshift(lin_operator)
         w = fftshift(w)
         return lin_operator, w, gamma
-    
+
     lin_operator, w, gamma = load_fiber(fiber)
 
     # Raman response:
@@ -132,14 +128,14 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         fr = 0
     else:
         raise ValueError('Raman method not supported')
-        
+
     # define function to return the RHS of Eq. (3.13):
     def rhs(z, aw):
-        nonlocal lin_operator, w, gamma  
-        
+        nonlocal lin_operator, w, gamma
+
         if reload_fiber:
-            lin_operator, w, gamma = load_fiber(fiber)
-            
+            lin_operator, w, gamma = load_fiber(fiber, z)
+
         at = fft(aw * exp(lin_operator*z))    # time domain field
         it = np.abs(at)**2                    # time domain intensity
 
@@ -181,20 +177,20 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     for i in range(len(z)):
         AW[i] = AW[i] * exp(lin_operator.transpose()*z[i])  # change variables
         AT[i, :] = fft(AW[i])            # time domain output
-        AW[i, :] = fftshift(AW[i])  
-        
+        AW[i, :] = fftshift(AW[i])
+
         # This is the original dudley scaling factor that I believe gives units
         # of sqrt(J/Hz) for the AW array. Removing this gives units that agree
         # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts) -DH 2021-12-15
-        
-        # AW[i, :] = AW[i, :] * dt * n  
-    
+
+        # AW[i, :] = AW[i, :] * dt * n
+
     res = PulseData(z, AT, AW, (v + w0)/(2*np.pi), pulse, fiber)
-    
+
     return res
 
 class PulseData:
-    
+
     def __init__(self, z, AT, AW, f, pulse, fiber):
         self.z = z
         self.AW = AW
@@ -202,15 +198,15 @@ class PulseData:
         self.f = f
         self.pulse_in = pulse
         self.fiber = fiber
-        
+
     def get_results(self):
         return self.z, self.AT, self.AW, self.f
-    
+
     def get_amplitude_wavelengths(self, wavemin=None, wavemax=None, waven=None, jacobian=False):
         '''
-        Re-interpolates the AW array from evenly-spaced frequencies to 
-        evenly-spaced wavelengths. 
-        
+        Re-interpolates the AW array from evenly-spaced frequencies to
+        evenly-spaced wavelengths.
+
         Parameters
         ----------
         wavemin : float or None
@@ -226,16 +222,18 @@ class PulseData:
             If None, it defaults to the number of points in AW multiplied by 2
             If an int, then this is just the number of points.
         '''
-        
+
+        c = constants.value('speed of light in vacuum')*1e9/1e12 # c in nm/ps
+
         if wavemin == None:
             wavemin = 0.25 * c/self.pulse_in._get_center_frequency_THz()
         if wavemax == None:
             wavemax = 4.0 * c/self.pulse_in._get_center_frequency_THz()
         if waven== None:
             waven = self.AW.shape[1] * 2
-        
+
         print('Waven: %i'%waven)
-        
+
         IW_dB = 10*log10(np.abs(self.AW)**2)  # log scale spectral intensity
         new_wls = np.linspace(wavemin, wavemax, waven)
 
@@ -244,12 +242,9 @@ class PulseData:
 
         # fast interpolation to wavelength grid,
         # so that we can plot using imshow for fast viewing:
-        # This requires Scipy > 1.6.0
+        # (This requires Scipy > 1.6.0)
         AW_WL = scipy.ndimage.interpolation.map_coordinates(
                     np.abs(self.AW)**2, ((NEW_Z-np.min(self.z))/(self.z[1]-self.z[0]),
                          (NEW_F-np.min(self.f))/(self.f[1]-self.f[0])),
                     order=1, mode='nearest')
         return new_wls, AW_WL
-        
-    
-
