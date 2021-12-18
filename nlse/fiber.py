@@ -29,11 +29,12 @@ class FiberInstance:
         self.c = constants.speed_of_light * 1e9/1e12 # c in nm/ps
         self.is_simple_fiber = False
         self.dispersion_changes_with_z = False
+        self.alpha_changes_with_z = False
         self.gamma_changes_with_z = False
         
     
     def generate_fiber(self, length=0.1, center_wl_nm=1550, betas=[0], 
-                       gamma_W_m=0, gain=0, gvd_units = 'ps^n/m', label = 'fiber0'):
+                       gamma_W_m=0, alpha_W=0, gain=0, gvd_units='ps^n/m', label='fiber0'):
         """ This generates a fiber instance using the beta-coefficients."""
 
         self.length = length
@@ -51,6 +52,7 @@ class FiberInstance:
         self.center_wavelength = center_wl_nm
         self.betas = np.copy(np.array(betas))
         self.gamma = gamma_W_m
+        self.alpha = alpha_W
         # If in km^-1 units, scale to m^-1
         if gvd_units == 'ps^n/km':
             self.betas = self.betas * 1.0e-3
@@ -117,6 +119,22 @@ class FiberInstance:
         """
         self.gamma_function = gamma_function
         self.gamma_changes_with_z = True
+    
+    def set_alpha_function(self, gamma_function):
+        """
+        This allows the user to provide a function for alpha (the loss), 
+        in units of 1/Watts that can vary as a function of `z`, the length 
+        along the fiber.
+
+        Parameters
+        ----------
+        alpha_function : function
+            a function returning gamma as a function of z. z should be in
+            units of meters.
+
+        """
+        self.alpha_function = gamma_function
+        self.alpha_changes_with_z = True
 
     def get_gamma(self, z=0):
         """
@@ -138,7 +156,28 @@ class FiberInstance:
             gamma = self.gamma
 
         return gamma
+    
+    
+    def get_alpha(self, z=0):
+        """
+        Allows the alpha (loss per meter) to be queried at a specific z-position
 
+        Parameters
+        ----------
+        z : float
+            the position along the fiber (in meters)
+
+        Returns
+        -------
+        alpha : float
+            the loss (in units of 1/Watts)"""
+
+        if self.alpha_changes_with_z:
+            alpha = self.alpha_function(z)
+        else:
+            alpha = self.alpha
+
+        return alpha
 
     def get_B(self, pulse, z=0):
         """This provides the propagation constant (beta) at the frequencies of

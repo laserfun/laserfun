@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import nlse
-import time
-import pynlo
 
 FWHM    = 0.050  # pulse duration (ps)
 pulseWL = 1550   # pulse central wavelength (nm)
@@ -11,7 +9,7 @@ GDD     = 0.0    # Group delay dispersion (ps^2)
 TOD     = 0      # Third order dispersion (ps^3)
 
 Window  = 7.0    # simulation window (ps)
-Steps   = 100    # simulation steps
+Steps   = 200    # simulation steps
 Points  = 2**12  # simulation points
 rtol    = 1e-4   # relative error
 atol    = 1e-4   # absolute error
@@ -21,14 +19,15 @@ beta2i   = -120   # (ps^2/km)
 beta3i   = 0.00   # (ps^3/km)
 beta4i   = 0.005  # (ps^4/km)
 Gammai   = 1000   # nonlinearity (1/(W km))
+Alphai   = 0      # loss (dB/cm)
 
 # final properties (at the end of the fiber)
 beta2f   = -120  # (ps^2/km)
 beta3f   = 0.00   # (ps^3/km)
 beta4f   = 0.005  # (ps^4/km)
-Gammaf    = 2000   # nonlinearity (1/(W km))
+Gammaf   = 2000   # nonlinearity (1/(W km))
+Alphaf   = 2     # loss (dB/cm)
 
-Alpha   = 0      # loss (dB/cm)
 Length  = 10     # length in mm
 
 fibWL   = pulseWL  # Center WL of fiber (nm)
@@ -36,7 +35,8 @@ fibWL   = pulseWL  # Center WL of fiber (nm)
 Raman   = True    # Enable Raman effect?
 Steep   = True    # Enable self steepening?
 
-alpha = np.log((10**(Alpha * 0.1))) * 100  # convert from dB/cm to 1/m
+alphai = np.log((10**(Alphai * 0.1))) * 100  # convert from dB/cm to 1/m
+alphaf = np.log((10**(Alphaf * 0.1))) * 100  # convert from dB/cm to 1/m
 
 # set up plots for the results:
 fig = plt.figure(figsize=(8,8))
@@ -55,7 +55,7 @@ pulse.set_epp(EPP)  # set the pulse energy
 # create the fiber!
 fiber1 = nlse.fiber.FiberInstance()
 fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2i*1e-3, beta3i*1e-3, beta4i*1e-3),
-                      gamma_W_m=Gammai * 1e-3, gain=-alpha)
+                      gamma_W_m=Gammai * 1e-3, alpha_W=alphai)
 
 def dispersion_function(z):
     frac = z/(Length*1e-3)
@@ -73,11 +73,19 @@ def gamma_function(z):
 
 fiber1.set_gamma_function(gamma_function)
 
+def alpha_function(z):
+    frac = z/(Length*1e-3)
+    alpha = ((1-frac)*alphai + frac*alphaf)
+    
+    return alpha
+
+fiber1.set_alpha_function(alpha_function)
+
 
 # propagate the pulse using the NLSE
-results = nlse.NLSE.nlse(pulse, fiber1, loss=alpha, raman=Raman,
+results = nlse.NLSE.nlse(pulse, fiber1, loss=0, raman=Raman,
                               shock=Steep, flength=Length*1e-3, nsaves=Steps,
-                              atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=True)
+                              atol=atol, rtol=rtol, integrator='lsoda', reload_fiber=True)
 
 z, AT, AW, f = results.get_results() # unpack results
 
