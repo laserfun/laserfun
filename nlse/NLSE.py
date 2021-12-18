@@ -103,6 +103,7 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         # gets the fiber info from the fiber object
         gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
         b = fiber.get_B(pulse, z)
+        loss = fiber.get_alpha(z)
         lin_operator = 1j*b - loss*0.5        # linear operator
 
         if np.nonzero(w0) and shock:          # if w0>0 then include shock
