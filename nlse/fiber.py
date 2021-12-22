@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import numpy as np
 import scipy.interpolate
 from scipy.special import factorial
-from scipy import constants
 from scipy.optimize import minimize
 
+c_mks = 299792458.0
+c_nmps = c_mks * 1e9/1e12
 
 def IFFT_t(A,ax=0):
     return fft.ifftshift(fft.fft(fft.fftshift(A,axes=(ax,)),axis=ax),axes=(ax,)) 
@@ -25,8 +22,6 @@ class FiberInstance:
     alpha       = None
     def __init__(self, fiber_db = 'general_fibers',
                        fiber_db_dir = None):
-        self.c_mks = constants.speed_of_light
-        self.c = constants.speed_of_light * 1e9/1e12 # c in nm/ps
         self.is_simple_fiber = False
         self.dispersion_changes_with_z = False
         self.alpha_changes_with_z = False
@@ -228,25 +223,25 @@ class FiberInstance:
                 self.betas     = np.array(self.dispersion_function(z))
 
 
-        B = np.zeros((pulse.NPTS,))
+        B = np.zeros((pulse.npts,))
         if self.fiberspecs["dispersion_format"] == "D":
             self.betas = DTabulationToBetas(pulse.center_wavelength_nm,
                                             np.transpose(np.vstack((self.x,self.y))),
                                             self.poly_order,
                                             DDataIsFile = False)
             for i in range(len(self.betas)):
-                B = B + self.betas[i]/factorial(i+2)*pulse.V_THz**(i+2)
+                B = B + self.betas[i]/factorial(i+2)*pulse.v_THz**(i+2)
             return B
 
         elif self.fiberspecs["dispersion_format"] == "GVD":
             # calculate beta[n]/n! * (w-w0)^n
             # w0 is the center of the Taylor expansion, and is defined by the
             # fiber. the w's are from the optical spectrum
-            fiber_omega0 =  2*np.pi*self.c / self.center_wavelength # THz
+            fiber_omega0 =  2*np.pi*c_nmps / self.center_wavelength # THz
             betas = self.betas
             for i in range(len(betas)):
                 betas[i] = betas[i]
-                B = B + betas[i] / factorial(i + 2) * (pulse.W_THz-fiber_omega0)**(i + 2)
+                B = B + betas[i] / factorial(i + 2) * (pulse.w_THz-fiber_omega0)**(i + 2)
 
         elif self.fiberspecs["dispersion_format"] == "n":
             # simply interpolate (using a spline) the betas from the refractive index
@@ -258,15 +253,15 @@ class FiberInstance:
 
             # InterpolatedUnivariateSpline wants increasing x, so flip arrays
             interpolator = scipy.interpolate.InterpolatedUnivariateSpline(supplied_W_THz[::-1], supplied_betas[::-1])
-            B = interpolator(pulse.W_THz)
+            B = interpolator(pulse.w_THz)
 
         # in the case of "GVD" or "n" it's possible (likely) that the betas will not be zero and have zero
         # slope at the pulse central frequency. For the NLSE, we need to move into a frame propagating at the
         # same group velocity, so we need to set the value and slope of beta at the pulse wavelength to zero:
         if self.fiberspecs["dispersion_format"] == "GVD" or self.fiberspecs["dispersion_format"] == "n":
-            center_index = np.argmin(np.abs(pulse.V_THz))
-            slope = np.gradient(B)/np.gradient(pulse.W_THz)
-            B = B - slope[center_index] * (pulse.V_THz) - B[center_index]
+            center_index = np.argmin(np.abs(pulse.v_THz))
+            slope = np.gradient(B)/np.gradient(pulse.w_THz)
+            B = B - slope[center_index] * (pulse.v_THz) - B[center_index]
 
             # print B
             return B
@@ -274,95 +269,95 @@ class FiberInstance:
         else:
             return -1
 
-
-    def get_gain(self, pulse, output_power=1):
-        """ Retrieve gain spectrum for fiber. If fiber has 'simple gain', this
-        is a scalar. If the fiber has a gain spectrum (eg EDF or YDF), this will
-        return this spectrum as a vector corresponding to the Pulse class
-        frequency axis. In this second case, the output power must be specified, from
-        which the gain/length is calculated. """
-        if self.fiberspecs["is_gain"]:
-            if self.is_simple_fiber:
-                return self.gain
-            else:
-                # If the fiber is generated then it has no gain spectrum
-                # and an array with all values equal to self.gain is returned.
-                # This is signaled by gain_x_data.
-                if self.fiberspecs['gain_x_data'] is not None:
-                    self.gain_x_units = self.fiberspecs["gain_x_units"]
-                    x = np.array(self.fiberspecs["gain_x_data"])
-                    y = np.array(self.fiberspecs["gain_y_data"])
-                    f = scipy.interpolate.interp1d(self.c_mks/x[::-1],y[::-1],kind ='cubic',
-                                 bounds_error=False,fill_value=0)
-                    gain_spec = f(pulse.W_mks/ (2*np.pi))
-
-                    g = lambda k: np.abs(output_power - pulse.frep_Hz * pulse.dT_mks*
-                                        np.trapz(np.abs(
-                                            IFFT_t( pulse.AW *
-                                                np.exp(k*gain_spec*self.length/2.0)
-                                                )
-                                                )**2))
-
-                    scale_factor = minimize(g, 1, method='Powell')
-
-                    return gain_spec * scale_factor.x
-                else:
-                    return np.ones((pulse.NPTS,)) * self.gain
-        else:
-            return np.zeros((pulse.NPTS,))
-
-    def Beta2_to_D(self, pulse): # in ps / nm / km
-        """ This provides the dispersion parameter D (in ps / nm / km) at each frequency of the supplied pulse"""
-        return -2 * np.pi * self.c / pulse.wl_nm**2 * self.Beta2(pulse) * 1000
-
-    def Beta2(self, pulse):
-        """ This provides the beta_2 (in ps^2 / meter)."""
-        dw = pulse.V_THz[1] - pulse.V_THz[0]
-        out = np.diff(self.get_betas(pulse), 2) / dw**2
-        out = np.append(out[0], out)
-        out = np.append(out, out[-1])
-        return out
-
-def DTabulationToBetas(lambda0, DData, polyOrder=5, return_diagnostics=False, makeplots=False):
-    """ Read in a tabulation of D vs Lambda. Returns betas in array 
-    [beta2, beta3, ...]. If return_diagnostics is True, then return
-    (betas, fit_x_axis (omega in THz), data (ps^2), fit (ps^2) ) """
-        
-    DTab = DData[:]
-            
-    # Units of D are ps/nm/km
-    # Convert to s/m/m 
-    DTab[:,1] = DTab[:,1] * 1e-12 * 1e9 * 1e-3
-    
-    c = constants.speed_of_light
-    
-    omegaAxis = 2*np.pi*c  / (DTab[:,0]*1e-9) - 2*np.pi*c  /(lambda0 * 1e-9)
-    # Convert from D to beta via  beta2 = -D * lambda^2 / (2*pi*c) 
-    
-    betaTwo = -DTab[:,1] * (DTab[:,0]*1e-9)**2 / (2*np.pi*c) 
-    # The units of beta2 for the GNLSE solver are ps^2/m; convert
-    betaTwo = betaTwo * 1e24
-    # Also convert angular frequency to rad/ps
-    omegaAxis = omegaAxis * 1e-12 #  s/ps
-    
-    # Fit beta2 with high-order polynomial
-    polyFitCo = np.polyfit(omegaAxis, betaTwo, polyOrder)
-    
-    Betas = polyFitCo[::-1]
-    
-    polyFit = np.zeros((len(omegaAxis),))   
-
-    for i in range(len(Betas)):
-        Betas[i] = Betas[i] * factorial(i)
-        polyFit = polyFit + Betas[i] / factorial(i)*omegaAxis**i
-    
-    if makePlots:      
-        plt.plot(omegaAxis, betaTwo,'o')
-        plt.plot(omegaAxis, polyFit)
-        plt.show()
-        
-    if return_diagnostics:
-        return Betas, omegaAxis, betaTwo, polyFit
-        
-    else:
-        return Betas
+#
+#     def get_gain(self, pulse, output_power=1):
+#         """ Retrieve gain spectrum for fiber. If fiber has 'simple gain', this
+#         is a scalar. If the fiber has a gain spectrum (eg EDF or YDF), this will
+#         return this spectrum as a vector corresponding to the Pulse class
+#         frequency axis. In this second case, the output power must be specified, from
+#         which the gain/length is calculated. """
+#         if self.fiberspecs["is_gain"]:
+#             if self.is_simple_fiber:
+#                 return self.gain
+#             else:
+#                 # If the fiber is generated then it has no gain spectrum
+#                 # and an array with all values equal to self.gain is returned.
+#                 # This is signaled by gain_x_data.
+#                 if self.fiberspecs['gain_x_data'] is not None:
+#                     self.gain_x_units = self.fiberspecs["gain_x_units"]
+#                     x = np.array(self.fiberspecs["gain_x_data"])
+#                     y = np.array(self.fiberspecs["gain_y_data"])
+#                     f = scipy.interpolate.interp1d(c_mks/x[::-1],y[::-1],kind ='cubic',
+#                                  bounds_error=False,fill_value=0)
+#                     gain_spec = f(pulse.w_THz*1e-12/ (2*np.pi))
+#
+#                     g = lambda k: np.abs(output_power - pulse.frep_MHz*1e6 * (pulse.dt_ps*1e-12)*
+#                                         np.trapz(np.abs(
+#                                             IFFT_t( pulse.aw *
+#                                                 np.exp(k*gain_spec*self.length/2.0)
+#                                                 )
+#                                                 )**2))
+#
+#                     scale_factor = minimize(g, 1, method='Powell')
+#
+#                     return gain_spec * scale_factor.x
+#                 else:
+#                     return np.ones((pulse.npts,)) * self.gain
+#         else:
+#             return np.zeros((pulse.npts,))
+#
+#     def Beta2_to_D(self, pulse): # in ps / nm / km
+#         """ This provides the dispersion parameter D (in ps / nm / km) at each frequency of the supplied pulse"""
+#         return -2 * np.pi * c_nmps / pulse.wavelength_nm**2 * self.Beta2(pulse) * 1000
+#
+#     def Beta2(self, pulse):
+#         """ This provides the beta_2 (in ps^2 / meter)."""
+#         dw = pulse.v_THz[1] - pulse.v_THz[0]
+#         out = np.diff(self.get_betas(pulse), 2) / dw**2
+#         out = np.append(out[0], out)
+#         out = np.append(out, out[-1])
+#         return out
+#
+# def DTabulationToBetas(lambda0, DData, polyOrder=5, return_diagnostics=False, makeplots=False):
+#     """ Read in a tabulation of D vs Lambda. Returns betas in array
+#     [beta2, beta3, ...]. If return_diagnostics is True, then return
+#     (betas, fit_x_axis (omega in THz), data (ps^2), fit (ps^2) ) """
+#
+#     DTab = DData[:]
+#
+#     # Units of D are ps/nm/km
+#     # Convert to s/m/m
+#     DTab[:,1] = DTab[:,1] * 1e-12 * 1e9 * 1e-3
+#
+#     c = constants.speed_of_light
+#
+#     omegaAxis = 2*np.pi*c  / (DTab[:,0]*1e-9) - 2*np.pi*c  /(lambda0 * 1e-9)
+#     # Convert from D to beta via  beta2 = -D * lambda^2 / (2*pi*c)
+#
+#     betaTwo = -DTab[:,1] * (DTab[:,0]*1e-9)**2 / (2*np.pi*c)
+#     # The units of beta2 for the GNLSE solver are ps^2/m; convert
+#     betaTwo = betaTwo * 1e24
+#     # Also convert angular frequency to rad/ps
+#     omegaAxis = omegaAxis * 1e-12 #  s/ps
+#
+#     # Fit beta2 with high-order polynomial
+#     polyFitCo = np.polyfit(omegaAxis, betaTwo, polyOrder)
+#
+#     Betas = polyFitCo[::-1]
+#
+#     polyFit = np.zeros((len(omegaAxis),))
+#
+#     for i in range(len(Betas)):
+#         Betas[i] = Betas[i] * factorial(i)
+#         polyFit = polyFit + Betas[i] / factorial(i)*omegaAxis**i
+#
+#     if makePlots:
+#         plt.plot(omegaAxis, betaTwo,'o')
+#         plt.plot(omegaAxis, polyFit)
+#         plt.show()
+#
+#     if return_diagnostics:
+#         return Betas, omegaAxis, betaTwo, polyFit
+#
+#     else:
+#         return Betas

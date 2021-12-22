@@ -7,5 +7,18 @@ The integration is performed with the [scipy.integrat.complex_ode](https://docs.
 
 The GNLSE propagates an optical input field (often a laser pulse) through a nonlinear material and takes into account dispersion and Chi-3 nonlinearity. It is a "one dimensional" calculation and doesn't capture things like self focusing and other geometric effects. It's most appropriate for analyzing light propagating through optical fibers or waveguides and other situations where the mode of the light doesn't change as it propagates.
 
+Unit tests
+----------
+To run the tests, go to the PyNLSE folder and run:
+
+    pytest nlse  -v  --cov=nlse
+
+Coverage can be checked with:
+
+    coverage html
+
+which generates a html file that shows which lines are covered by the tests.
+
+
 Enjoy!
 

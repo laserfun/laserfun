@@ -46,11 +46,9 @@ ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
 
 # create the pulse
-pulse = nlse.pulse.SechPulse(power=1, T0_ps=FWHM/1.76, center_wavelength_nm=pulseWL,
-                             time_window_ps=Window, GDD=GDD, TOD=TOD, NPTS= Points,
-                             frep_MHz=100, power_is_avg=False)
-
-pulse.set_epp(EPP)  # set the pulse energy
+pulse = nlse.pulse.Pulse('cw', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
+                             time_window_ps=Window, GDD=GDD, TOD=TOD, npts= Points,
+                             frep_MHz=100, power_is_avg=False, epp=EPP)
 
 # create the fiber!
 fiber1 = nlse.fiber.FiberInstance()
@@ -81,7 +79,6 @@ def alpha_function(z):
 
 fiber1.set_alpha_function(alpha_function)
 
-
 # propagate the pulse using the NLSE
 results = nlse.NLSE.nlse(pulse, fiber1, loss=0, raman=Raman,
                               shock=Steep, flength=Length*1e-3, nsaves=Steps,
@@ -90,7 +87,7 @@ results = nlse.NLSE.nlse(pulse, fiber1, loss=0, raman=Raman,
 z, AT, AW, f = results.get_results() # unpack results
 
 z = z * 1e3  # convert to mm
-t = pulse.T_ps
+t = pulse.t_ps
 
 def dB(num):
     return 10 * np.log10(np.abs(num)**2)
@@ -98,8 +95,8 @@ def dB(num):
 IW_dB = dB(AW)
 IT_dB = dB(AT)
 
-ax0.plot(f, dB(pulse.AW), color = 'b', label='Initial pulse')
-ax1.plot(t, dB(pulse.AT), color = 'b', label='Initial pulse')
+ax0.plot(f, dB(pulse.aw), color = 'b', label='Initial pulse')
+ax1.plot(t, dB(pulse.at), color = 'b', label='Initial pulse')
 
 ax0.plot(f, IW_dB[-1], color='r', label='Final pulse')
 ax1.plot(t, IT_dB[-1], color='r', label='Final pulse')
