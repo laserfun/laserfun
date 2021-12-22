@@ -3,3 +3,4 @@
 *.jpg
 *.pdf
 *.pyc
+*.coverage

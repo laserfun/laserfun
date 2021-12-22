@@ -91,9 +91,9 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         raise valueError('fft method not supported.')
 
     # get the pulse info from the pulse object:
-    t = pulse.T_ps  #  time array in picoseconds
-    at = pulse.AT   #  amplitude for those times in sqrt(W)
-    w0 = pulse._get_center_frequency_THz()*2*np.pi  # center freq (angular!)
+    t = pulse.t_ps  #  time array in picoseconds
+    at = pulse.at   #  amplitude for those times in sqrt(W)
+    w0 = pulse.centerfrequency_THz * 2 * np.pi  # center freq (angular!)
 
     n = t.size        # number of time/frequency points
     dt = t[1] - t[0]  # time step
@@ -106,7 +106,7 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         loss = fiber.get_alpha(z)
         lin_operator = 1j*b - loss*0.5        # linear operator
 
-        if np.nonzero(w0) and shock:          # if w0>0 then include shock
+        if w0>0 and shock:          # if w0>0 then include shock
             gamma = gamma/w0
             w = v + w0              # for shock w is true freq
         else:
@@ -227,9 +227,9 @@ class PulseData:
         c = constants.value('speed of light in vacuum')*1e9/1e12 # c in nm/ps
 
         if wavemin == None:
-            wavemin = 0.25 * c/self.pulse_in._get_center_frequency_THz()
+            wavemin = 0.25 * c/self.pulse_in.centerfrequency_THz
         if wavemax == None:
-            wavemax = 4.0 * c/self.pulse_in._get_center_frequency_THz()
+            wavemax = 4.0 * c/self.pulse_in.centerfrequency_THz
         if waven== None:
             waven = self.AW.shape[1] * 2
 
