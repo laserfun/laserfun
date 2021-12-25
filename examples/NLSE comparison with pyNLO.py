@@ -40,22 +40,17 @@ ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2)
 
 # create the pulse
-pulse = nlse.pulse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
-                             time_window_ps=Window, GDD=GDD, TOD=TOD, npts= Points,
-                             frep_MHz=100, power_is_avg=False, epp=EPP)
-
-
-# t = pulse.T_ps
+pulse = nlse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
+                   time_window_ps=Window, GDD=GDD, TOD=TOD, npts=Points,
+                   frep_MHz=100, power_is_avg=False, epp=EPP)
 
 # create the fiber!
-fiber1 = nlse.fiber.FiberInstance()
-fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, beta4),
-                      gamma_W_m=Gamma * 1e-3, gvd_units='ps^n/km', gain=-alpha)
-
+fiber1 = nlse.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2*1e-3, beta3*1e-3, beta4*1e-3),
+                      gamma_W_m=Gamma*1e-3, loss_dB_per_m=Alpha*100)
 # run the new method:
 t_start = time.time()
-results = nlse.NLSE.nlse(pulse, fiber1, loss=alpha, raman=Raman,
-                              shock=Steep, flength=Length*1e-3, nsaves=Steps,
+results = nlse.NLSE.nlse(pulse, fiber1, raman=Raman,
+                              shock=Steep, nsaves=Steps,
                               atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=False)
 z, AT, AW, w = results.get_results()
 
@@ -79,7 +74,7 @@ pulse_pynlo.set_epp(EPP)
 fiber_pynlo = pynlo.media.fibers.fiber.FiberInstance()
 fiber_pynlo.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, beta4),
                       gamma_W_m=Gamma * 1e-3, gvd_units='ps^n/km', gain=-alpha)
-                      
+        
 evol = pynlo.interactions.FourWaveMixing.SSFM.SSFM(local_error=.0001, USE_SIMPLE_RAMAN=True,
                  disable_Raman = np.logical_not(Raman),
                  disable_self_steepening = np.logical_not(Steep))

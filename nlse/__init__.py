@@ -7,3 +7,5 @@ Created on Mon Jun 08 11:57:31 2015
 from . import pulse
 from . import fiber
 from . import NLSE
+from .fiber import Fiber
+from .pulse import Pulse
