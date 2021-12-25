@@ -1,6 +1,7 @@
 import nlse
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 def test_pulse():
     """Test that the maxima of a gaussian and sech pulse match their 
@@ -30,8 +31,7 @@ def test_pulse():
     pulse.add_noise(noise_type='one_photon_freq')
 
 def test_fiber():
-    fiber = nlse.fiber.FiberInstance()
-    fiber.generate_fiber(1e-3, center_wl_nm=1550, betas=(0, 0, 0))
+    fiber = nlse.Fiber(1e-3, center_wl_nm=1550)
     
     def myFunction(z):
         return 1
@@ -41,53 +41,23 @@ def test_fiber():
     # fiber.get_B()
     
     
-    
-def test_nlse():
+def test_nlse_spectrum():
     """
     This compares the NLSE output with previous results that were benchmarked
     agaist PyNLO and found to be in good agreement in the regions with amplitude."""    
-    FWHM    = 0.050  # pulse duration (ps)
-    pulseWL = 1550   # pulse central wavelength (nm)
-    EPP     = 50e-12 # Energy per pulse (J)
-    GDD     = 0.0    # Group delay dispersion (ps^2)
-    TOD     = 0      # Third order dispersion (ps^3)
-
-    Window  = 7.0    # simulation window (ps)
-    Steps   = 100    # simulation steps
-    Points  = 2**12  # simulation points
-    rtol    = 1e-4   # relative error
-    atol    = 1e-4   # absolute error
-
-    beta2   = -120   # (ps^2/km)
-    beta3   = 0.00   # (ps^3/km)
-    beta4   = 0.005  # (ps^4/km)
-
-    Length  = 8     # length in mm
-
-    Alpha   = 0      # loss (dB/cm)
-    Gamma   = 1000   # nonlinearity (1/(W km))
-
-    fibWL   = pulseWL  # Center WL of fiber (nm)
-
-    Raman   = True    # Enable Raman effect?
-    Steep   = True    # Enable self steepening?
-
-    alpha = np.log((10**(Alpha * 0.1))) * 100  # convert from dB/cm to 1/m
+    beta2   = -120 * 1e-3 # (ps^2/m)
+    beta3   = 0.00 * 1e-3 # (ps^3/m)
+    beta4   = 0.005* 1e-3 # (ps^4/km)
     
-    # create the pulse
-    pulse = nlse.pulse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
-                                 time_window_ps=Window, GDD=GDD, TOD=TOD, npts= Points,
-                                 frep_MHz=100, power_is_avg=False, epp=EPP)
+    pulse = nlse.pulse.Pulse(pulse_type='sech', fwhm_ps=0.050, time_window_ps=7, 
+                             npts=2**12, center_wavelength_nm=1550.0, epp=50e-12)
 
-    # create the fiber!
-    fiber1 = nlse.fiber.FiberInstance()
-    fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2, beta3, beta4),
-                          gamma_W_m=Gamma * 1e-3, gvd_units='ps^n/km', gain=-alpha)
-
-    # run the new method:
-    results = nlse.NLSE.nlse(pulse, fiber1, loss=alpha, raman=Raman,
-                                  shock=Steep, flength=Length*1e-3, nsaves=Steps,
-                                  atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=False)
+    fiber1 = nlse.Fiber(length=8e-3, center_wl_nm=1550.0, gamma_W_m=1,
+                        dispersion=(beta2, beta3, beta4))
+                         
+    results = nlse.NLSE.nlse(pulse, fiber1, raman=True, shock=True, nsaves=100,
+                             atol=1e-5, rtol=1e-5, integrator='lsoda',
+                             print_status=False)
     
     z, AT, AW, w = results.get_results()
     dB = 10*np.log10(np.abs(AW[-1])**2)
@@ -98,9 +68,25 @@ def test_nlse():
     np.testing.assert_allclose(dB, dB_prev, rtol=1e-4, atol=0)
     
     results.get_amplitude_wavelengths()
+
+def test_nlse_loss():
+    """
+    This checks that the loss is applied correctly in the NLSE. 
+    """    
+    # create a 1 meter fiber with 3.01 dB (50%) loss per meter:
+    loss = 3.0102999566
+    fiber = nlse.Fiber(length=1, loss_dB_per_m=loss)
+
+    pulse = nlse.pulse.Pulse(epp=100e-12)  # create pulse
     
+    results = nlse.NLSE.nlse(pulse, fiber, print_status=False)
+    
+    assert np.abs(pulse.epp * 0.5 - results.pulse_out.epp)/pulse.epp < 1e-11
+    
+
     
 if __name__ == '__main__':
     test_pulse()
-    test_nlse()
+    test_nlse_loss()
+    test_nlse_spectrum()
     test_fiber()

@@ -6,10 +6,11 @@ from scipy.integrate import complex_ode
 from scipy import constants
 import scipy.ndimage
 import time
+import nlse
 
-def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
-          atol=1e-4, rtol=1e-4, integrator='lsoda', fft_method='scipy',
-          reload_fiber=False, print_status=True):
+def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
+         raman=False, shock=True, integrator='lsoda', fft_method='scipy',
+         print_status=True):
     """
     This function propagates an optical input field (often a laser pulse)
     through a nonlinear material using the generalized nonlinear
@@ -36,19 +37,23 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         This is the input pulse.
     fiber : fiber object
         This defines the media ("fiber") through which the pulse propagates.
-    loss : float
-        Loss in 1/m, not dB!
-    fr : float
-        Frequency domain raman. More info needed.
-    rt : numpy array
-        The time domain Raman response. Matches the time grid T.
-    flength : float
-        the fiber length [meters]
     nsaves : int
         the number of equidistant grid points along the fiber to return
         the field. Note that the integrator usually takes finer steps than
         this, the nsaves parameters simply determines what is returned by this
         function
+    atol : float
+        absolute tolerance for the integrator. Smaller values produce more
+        accurate results but require longer integration times. 1e-4 works well.
+    rtol : float
+        relative tolerance for the integrator. 1e-4 work well. 
+    raman : boolean
+        determines if the Raman effect will be included. Default is False
+    shock : boolnea
+        determines if the self-steepening (shock) term will be taken into
+        account. This is especially important for situations where the
+        slowly varying envelope approximation starts to break down, which 
+        can occur for large bandwidths (short pulses).
     integrator : string
         Selects the integrator that will be passes to scipy.integrate.ode.
         options are 'lsoda' (default), 'vode', 'dopri5', 'dopri853'.
@@ -99,11 +104,16 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     dt = t[1] - t[0]  # time step
     v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
 
+    flength = fiber.length
+    
     def load_fiber(fiber, z=0):
         # gets the fiber info from the fiber object
         gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
         b = fiber.get_B(pulse, z)
-        loss = fiber.get_alpha(z)
+        
+        # get alpha and avoid divide-by-zero
+        loss = np.log(10**(fiber.get_alpha(z)*0.1))
+        
         lin_operator = 1j*b - loss*0.5        # linear operator
 
         if w0>0 and shock:          # if w0>0 then include shock
@@ -166,7 +176,7 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
     for count, zi in enumerate(z[1:]):
 
         if print_status:
-            print('% 6.1f%% complete - %.1e m - %.1f seconds' % ((zi/z[-1])*100, zi,
+            print('% 6.1f%% complete - %.3e m - %.1f seconds' % ((zi/z[-1])*100, zi,
                                                         time.time()-start_time))
         if not r.successful():
             raise Exception('Integrator failed! Check the input parameters.')
@@ -185,19 +195,23 @@ def nlse(pulse, fiber, loss=0, raman=True, shock=True, flength=1, nsaves=200,
         # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts) -DH 2021-12-15
 
         # AW[i, :] = AW[i, :] * dt * n
-
-    res = PulseData(z, AT, AW, (v + w0)/(2*np.pi), pulse, fiber)
+    
+    pulse_out = pulse.create_cloned_pulse()
+    pulse_out.at = AT[-1]
+    
+    res = PulseData(z, AT, AW, (v + w0)/(2*np.pi), pulse, pulse_out, fiber)
 
     return res
 
 class PulseData:
 
-    def __init__(self, z, AT, AW, f, pulse, fiber):
+    def __init__(self, z, AT, AW, f, pulse, pulse_out, fiber):
         self.z = z
         self.AW = AW
         self.AT = AT
         self.f = f
         self.pulse_in = pulse
+        self.pulse_out = pulse_out
         self.fiber = fiber
 
     def get_results(self):
@@ -232,8 +246,6 @@ class PulseData:
             wavemax = 4.0 * c/self.pulse_in.centerfrequency_THz
         if waven== None:
             waven = self.AW.shape[1] * 2
-
-        print('Waven: %i'%waven)
 
         IW_dB = 10*log10(np.abs(self.AW)**2)  # log scale spectral intensity
         new_wls = np.linspace(wavemin, wavemax, waven)

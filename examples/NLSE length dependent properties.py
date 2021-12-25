@@ -35,9 +35,6 @@ fibWL   = pulseWL  # Center WL of fiber (nm)
 Raman   = True    # Enable Raman effect?
 Steep   = True    # Enable self steepening?
 
-alphai = np.log((10**(Alphai * 0.1))) * 100  # convert from dB/cm to 1/m
-alphaf = np.log((10**(Alphaf * 0.1))) * 100  # convert from dB/cm to 1/m
-
 # set up plots for the results:
 fig = plt.figure(figsize=(8,8))
 ax0 = plt.subplot2grid((3,2), (0, 0), rowspan=1)
@@ -46,14 +43,13 @@ ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
 
 # create the pulse
-pulse = nlse.pulse.Pulse('cw', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
+pulse = nlse.pulse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
                              time_window_ps=Window, GDD=GDD, TOD=TOD, npts= Points,
                              frep_MHz=100, power_is_avg=False, epp=EPP)
 
 # create the fiber!
-fiber1 = nlse.fiber.FiberInstance()
-fiber1.generate_fiber(Length * 1e-3, center_wl_nm=fibWL, betas=(beta2i*1e-3, beta3i*1e-3, beta4i*1e-3),
-                      gamma_W_m=Gammai * 1e-3, alpha_W=alphai)
+fiber1 = nlse.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2i*1e-3, beta3i*1e-3, beta4i*1e-3),
+                      gamma_W_m=Gammai * 1e-3, loss_dB_per_m=Alphai)
 
 def dispersion_function(z):
     frac = z/(Length*1e-3)
@@ -73,15 +69,14 @@ fiber1.set_gamma_function(gamma_function)
 
 def alpha_function(z):
     frac = z/(Length*1e-3)
-    alpha = ((1-frac)*alphai + frac*alphaf)
-    
-    return alpha
+    alpha = ((1-frac)*Alphai + frac*Alphaf)
+    return alpha*100
 
 fiber1.set_alpha_function(alpha_function)
 
 # propagate the pulse using the NLSE
-results = nlse.NLSE.nlse(pulse, fiber1, loss=0, raman=Raman,
-                              shock=Steep, flength=Length*1e-3, nsaves=Steps,
+results = nlse.NLSE.nlse(pulse, fiber1,raman=Raman,
+                              shock=Steep, nsaves=Steps,
                               atol=atol, rtol=rtol, integrator='lsoda', reload_fiber=True)
 
 z, AT, AW, f = results.get_results() # unpack results
@@ -125,15 +120,5 @@ ax3.imshow(IT_dB, extent=extt, vmin=np.max(IT_dB) - 40.0, vmax=np.max(IT_dB), as
 ax3.set_xlabel('Frequency (THz)')
 
 fig.tight_layout()
-
-# wavelength plot 
-
-# wls, AW_WL = results.get_amplitude_wavelengths()
-# AW_WL = np.sqrt(AW_WL)
-#
-# extent = (np.min(wls), np.max(wls), np.min(z), np.max(z))
-#
-# plt.figure()
-# plt.imshow(dB(AW_WL), extent=extent, origin='lower', aspect='auto', vmin=np.max(dB(AW_WL)) - 40.0, vmax=np.max(dB(AW_WL)))
 
 plt.show()

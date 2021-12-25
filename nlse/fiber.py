@@ -11,46 +11,81 @@ def IFFT_t(A,ax=0):
     return fft.ifftshift(fft.fft(fft.fftshift(A,axes=(ax,)),axis=ax),axes=(ax,)) 
 
 
-class FiberInstance:
+class Fiber:
     """This is a class that contains the information about a fiber."""
-    betas       = None
-    length      = None
-    fibertype   = None
-    fiberspecs  = {}
-    poly_order  = None
-    gamma       = None
-    alpha       = None
-    def __init__(self, fiber_db = 'general_fibers',
-                       fiber_db_dir = None):
-        self.is_simple_fiber = False
+    
+    def __init__(self, length=0.1, center_wl_nm=1550, dispersion_format='GVD',
+                 dispersion=[0], gamma_W_m=0, loss_dB_per_m=0):
+        """ 
+        Generate a fiber object, which contains the dispersion, nonlinearity, 
+        gain, and loss data for a pulse to propagate through. 
+                                
+        Parameters
+        ----------
+        length : float
+            the length of the fiber in meters
+        center_wl_nm : float
+            the center wavelength of the fiber in nanometers. This is mainly
+            relevant if the dispersion is supplied in terms of the beta 
+            coefficients, which expand around a certain wavelength. But, it also
+            determines the B values returned by the get_B function.
+        dispersion_formats: string 
+            determines what format the dispersion is given in. Can be
+            'GVD' or 'D' or 'n'
+            Corresponding to :
+            Beta coefficients (GVD, in units of ps^2/m or ps^2/km) or
+            D (ps/nm/km)
+            n (effective refractive index)
+        dispersion : list or list of arrays
+            the format for the dispersion depends on the dispersion_format. 
+                - For dispersion_format='GVD', a list of beta coefficients is
+                supplied in units of 'ps^n/meter'. Not that the units are per 
+                meter and not per kilometer!
+                - For dispersion_format='D', a list of two arrays should be 
+                 supplied, with the first array being the wavelength 
+                 *in nanometers* and the second array being the D value in ps/(nm km).
+                - For dispersion_format='n', a list of two arrays should be supplied,
+                with the first array being the wavelength *in nanometers* and the 
+                second array being the refractive index (n).
+        gamma_W_m : float
+            This is the nonlinearity in terms of 1/(W m). Note that gamma is 
+            often given in units of 1/(W km), and in this case it is necessary
+            to set gamma_W_m = 1e-3 * gamma_W_km.
+            Gamma is described by Eq. 3.3 in Dudley's book:
+            gamma = w0*n2 / (c * Aeff), where w0 is the center frequency, n2 is
+            the third-order nonlinearity of the material at w0, c is the speed
+            of light, and Aeff is the effective area of the mode at w0.
+        loss_dB_per_m : float
+            this is the loss expressed as dB per meter
+            Note that wavelenght-independent gain can be achieved by using a 
+            negative loss. 
+        """
+
+        self.length = length
+        self.fiberspecs = dict()
+
+        self.center_wavelength = center_wl_nm
+        self.gamma = gamma_W_m
+        self.alpha = loss_dB_per_m
+        
+        self.fiberspecs['dispersion_format'] = dispersion_format
+        
+        if dispersion_format == 'GVD':
+            self.betas = np.copy(np.array(dispersion))
+            
+        elif dispersion_format == 'D':
+           raise ValueError('D format is not currently supported')
+        
+        elif dispersion_format == 'n':
+            self.x = dispersion[0]
+            self.y = dispersion[1]
+        
+        else:
+           raise ValueError('Dispersion format not recognized.')
+        
         self.dispersion_changes_with_z = False
         self.alpha_changes_with_z = False
         self.gamma_changes_with_z = False
-        
-    
-    def generate_fiber(self, length=0.1, center_wl_nm=1550, betas=[0], 
-                       gamma_W_m=0, alpha_W=0, gain=0, gvd_units='ps^n/m', label='fiber0'):
-        """ This generates a fiber instance using the beta-coefficients."""
-
-        self.length = length
-        self.fiberspecs= {}
-        self.fiberspecs['dispersion_format'] = 'GVD'
-        self.fibertype = label
-        if gain == 0:
-            self.fiberspecs["is_gain"] = False
-        else:
-            self.fiberspecs["is_gain"] = True
-        self.gain = gain
-        # The following line signals get_gain to use a flat gain spectrum
-        self.fiberspecs['gain_x_data' ] = None
-
-        self.center_wavelength = center_wl_nm
-        self.betas = np.copy(np.array(betas))
-        self.gamma = gamma_W_m
-        self.alpha = alpha_W
-        # If in km^-1 units, scale to m^-1
-        if gvd_units == 'ps^n/km':
-            self.betas = self.betas * 1.0e-3
 
 
     def set_dispersion_function(self, dispersion_function, dispersion_format='GVD'):
@@ -64,7 +99,7 @@ class FiberInstance:
         dispersion_function : function
             A function returning D or Beta coefficients as a function of z.
             z should be in meters.
-        dispersion_formats: 'GVD' or 'D' or 'n'
+        dispersion_format : 'GVD' or 'D' or 'n'
             determines if the dispersion will be identified in terms of Beta coefficients
             (GVD, in units of ps^2/m, not ps^2/km) or
             D (ps/nm/km)
@@ -225,13 +260,7 @@ class FiberInstance:
 
         B = np.zeros((pulse.npts,))
         if self.fiberspecs["dispersion_format"] == "D":
-            self.betas = DTabulationToBetas(pulse.center_wavelength_nm,
-                                            np.transpose(np.vstack((self.x,self.y))),
-                                            self.poly_order,
-                                            DDataIsFile = False)
-            for i in range(len(self.betas)):
-                B = B + self.betas[i]/factorial(i+2)*pulse.v_THz**(i+2)
-            return B
+            raise ValueError('D format is not currently supported')
 
         elif self.fiberspecs["dispersion_format"] == "GVD":
             # calculate beta[n]/n! * (w-w0)^n
@@ -269,95 +298,5 @@ class FiberInstance:
         else:
             return -1
 
-#
-#     def get_gain(self, pulse, output_power=1):
-#         """ Retrieve gain spectrum for fiber. If fiber has 'simple gain', this
-#         is a scalar. If the fiber has a gain spectrum (eg EDF or YDF), this will
-#         return this spectrum as a vector corresponding to the Pulse class
-#         frequency axis. In this second case, the output power must be specified, from
-#         which the gain/length is calculated. """
-#         if self.fiberspecs["is_gain"]:
-#             if self.is_simple_fiber:
-#                 return self.gain
-#             else:
-#                 # If the fiber is generated then it has no gain spectrum
-#                 # and an array with all values equal to self.gain is returned.
-#                 # This is signaled by gain_x_data.
-#                 if self.fiberspecs['gain_x_data'] is not None:
-#                     self.gain_x_units = self.fiberspecs["gain_x_units"]
-#                     x = np.array(self.fiberspecs["gain_x_data"])
-#                     y = np.array(self.fiberspecs["gain_y_data"])
-#                     f = scipy.interpolate.interp1d(c_mks/x[::-1],y[::-1],kind ='cubic',
-#                                  bounds_error=False,fill_value=0)
-#                     gain_spec = f(pulse.w_THz*1e-12/ (2*np.pi))
-#
-#                     g = lambda k: np.abs(output_power - pulse.frep_MHz*1e6 * (pulse.dt_ps*1e-12)*
-#                                         np.trapz(np.abs(
-#                                             IFFT_t( pulse.aw *
-#                                                 np.exp(k*gain_spec*self.length/2.0)
-#                                                 )
-#                                                 )**2))
-#
-#                     scale_factor = minimize(g, 1, method='Powell')
-#
-#                     return gain_spec * scale_factor.x
-#                 else:
-#                     return np.ones((pulse.npts,)) * self.gain
-#         else:
-#             return np.zeros((pulse.npts,))
-#
-#     def Beta2_to_D(self, pulse): # in ps / nm / km
-#         """ This provides the dispersion parameter D (in ps / nm / km) at each frequency of the supplied pulse"""
-#         return -2 * np.pi * c_nmps / pulse.wavelength_nm**2 * self.Beta2(pulse) * 1000
-#
-#     def Beta2(self, pulse):
-#         """ This provides the beta_2 (in ps^2 / meter)."""
-#         dw = pulse.v_THz[1] - pulse.v_THz[0]
-#         out = np.diff(self.get_betas(pulse), 2) / dw**2
-#         out = np.append(out[0], out)
-#         out = np.append(out, out[-1])
-#         return out
-#
-# def DTabulationToBetas(lambda0, DData, polyOrder=5, return_diagnostics=False, makeplots=False):
-#     """ Read in a tabulation of D vs Lambda. Returns betas in array
-#     [beta2, beta3, ...]. If return_diagnostics is True, then return
-#     (betas, fit_x_axis (omega in THz), data (ps^2), fit (ps^2) ) """
-#
-#     DTab = DData[:]
-#
-#     # Units of D are ps/nm/km
-#     # Convert to s/m/m
-#     DTab[:,1] = DTab[:,1] * 1e-12 * 1e9 * 1e-3
-#
-#     c = constants.speed_of_light
-#
-#     omegaAxis = 2*np.pi*c  / (DTab[:,0]*1e-9) - 2*np.pi*c  /(lambda0 * 1e-9)
-#     # Convert from D to beta via  beta2 = -D * lambda^2 / (2*pi*c)
-#
-#     betaTwo = -DTab[:,1] * (DTab[:,0]*1e-9)**2 / (2*np.pi*c)
-#     # The units of beta2 for the GNLSE solver are ps^2/m; convert
-#     betaTwo = betaTwo * 1e24
-#     # Also convert angular frequency to rad/ps
-#     omegaAxis = omegaAxis * 1e-12 #  s/ps
-#
-#     # Fit beta2 with high-order polynomial
-#     polyFitCo = np.polyfit(omegaAxis, betaTwo, polyOrder)
-#
-#     Betas = polyFitCo[::-1]
-#
-#     polyFit = np.zeros((len(omegaAxis),))
-#
-#     for i in range(len(Betas)):
-#         Betas[i] = Betas[i] * factorial(i)
-#         polyFit = polyFit + Betas[i] / factorial(i)*omegaAxis**i
-#
-#     if makePlots:
-#         plt.plot(omegaAxis, betaTwo,'o')
-#         plt.plot(omegaAxis, polyFit)
-#         plt.show()
-#
-#     if return_diagnostics:
-#         return Betas, omegaAxis, betaTwo, polyFit
-#
-#     else:
-#         return Betas
+
+
