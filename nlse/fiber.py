@@ -7,10 +7,6 @@ from scipy.optimize import minimize
 c_mks = 299792458.0
 c_nmps = c_mks * 1e9/1e12
 
-def IFFT_t(A,ax=0):
-    return fft.ifftshift(fft.fft(fft.fftshift(A,axes=(ax,)),axis=ax),axes=(ax,)) 
-
-
 class Fiber:
     """This is a class that contains the information about a fiber."""
     

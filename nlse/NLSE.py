@@ -93,7 +93,7 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     elif fft_method == 'scipy':
         from scipy.fftpack import fft, ifft, fftshift
     else:
-        raise valueError('fft method not supported.')
+        raise ValueError('fft method not supported.')
 
     # get the pulse info from the pulse object:
     t = pulse.t_ps  #  time array in picoseconds
