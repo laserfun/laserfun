@@ -49,7 +49,7 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         relative tolerance for the integrator. 1e-4 work well. 
     raman : boolean
         determines if the Raman effect will be included. Default is False
-    shock : boolnea
+    shock : boolean
         determines if the self-steepening (shock) term will be taken into
         account. This is especially important for situations where the
         slowly varying envelope approximation starts to break down, which 
