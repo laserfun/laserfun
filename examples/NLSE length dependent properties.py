@@ -43,12 +43,12 @@ ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
 
 # create the pulse
-pulse = nlse.pulse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
+pulse = lf.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
                              time_window_ps=Window, GDD=GDD, TOD=TOD, npts= Points,
                              frep_MHz=100, power_is_avg=False, epp=EPP)
 
 # create the fiber!
-fiber1 = nlse.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2i*1e-3, beta3i*1e-3, beta4i*1e-3),
+fiber1 = lf.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2i*1e-3, beta3i*1e-3, beta4i*1e-3),
                       gamma_W_m=Gammai * 1e-3, loss_dB_per_m=Alphai)
 
 def dispersion_function(z):
@@ -75,11 +75,11 @@ def alpha_function(z):
 fiber1.set_alpha_function(alpha_function)
 
 # propagate the pulse using the NLSE
-results = nlse.NLSE.nlse(pulse, fiber1,raman=Raman,
+results = lf.NLSE(pulse, fiber1,raman=Raman,
                               shock=Steep, nsaves=Steps,
                               atol=atol, rtol=rtol, integrator='lsoda', reload_fiber=True)
 
-z, f, t, AT, AW = results.get_results() # unpack results
+z, f, t, AW, AT = results.get_results() # unpack results
 
 z = z * 1e3  # convert to mm
 
