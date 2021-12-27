@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import nlse
+import laserfun as lf
 import time
 import pynlo
 
@@ -40,19 +40,19 @@ ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
 ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2)
 
 # create the pulse
-pulse = nlse.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
+pulse = lf.Pulse(pulse_type='sech', power=1, fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
                    time_window_ps=Window, GDD=GDD, TOD=TOD, npts=Points,
                    frep_MHz=100, power_is_avg=False, epp=EPP)
 
 # create the fiber!
-fiber1 = nlse.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2*1e-3, beta3*1e-3, beta4*1e-3),
+fiber1 = lf.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion=(beta2*1e-3, beta3*1e-3, beta4*1e-3),
                       gamma_W_m=Gamma*1e-3, loss_dB_per_m=Alpha*100)
 # run the new method:
 t_start = time.time()
-results = nlse.NLSE.nlse(pulse, fiber1, raman=Raman,
+results = lf.NLSE(pulse, fiber1, raman=Raman,
                               shock=Steep, nsaves=Steps,
                               atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=False)
-z, AT, AW, w = results.get_results()
+z, f, t, AT, AW, w = results.get_results()
 
 
 t_nlse = time.time() - t_start
@@ -133,10 +133,11 @@ ax1.legend(loc='upper left', fontsize=9)
 
 fig.tight_layout()
 
-with open('nlse_output.txt', 'w') as outfile:
-    outfile.write('Freq (THz), intensity dB\n')
-    for fi, dBi in zip(f, IW_dB[-1]):
-        outfile.write('%.4e, %.4e\n'%(fi, dBi))
+# keep this in case we want to write a new output file
+# with open('nlse_output.txt', 'w') as outfile:
+#     outfile.write('Freq (THz), intensity dB\n')
+#     for fi, dBi in zip(f, IW_dB[-1]):
+#         outfile.write('%.4e, %.4e\n'%(fi, dBi))
         
 
 plt.show()

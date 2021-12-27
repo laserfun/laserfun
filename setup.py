@@ -14,12 +14,12 @@ else:
     np = None
     install_requires=[]
 
-setup(name='pynlse',
+setup(name='laserfun',
       version='0.0.1',
-      description='Nonliner Schrodinger equation in Python',
-      author='PyNLSE developers',
+      description='Python functions related to lasers',
+      author='laserfun developers',
       author_email='',
-      url='https://github.com/DanHickstein/pyNLSE',
+      url='https://github.com/laserfun/laserfun',
       install_requires=install_requires,
-      packages=['nlse']
+      packages=['laserfun']
      )

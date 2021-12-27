@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import nlse
+import laserfun as lf
 
 FWHM    = 0.50  # pulse duration (ps)
 pulseWL = 1550   # pulse central wavelength (nm)
@@ -19,7 +19,7 @@ parameters = dict(center_wavelength_nm=pulseWL, time_window_ps=Window,
 # create the pulses:
 for pulse_type in ('sech', 'gaussian', 'sinc'):
     print (pulse_type)
-    pulse = nlse.pulse.Pulse(pulse_type=pulse_type, **parameters)
+    pulse = lf.Pulse(pulse_type=pulse_type, **parameters)
 
     def dB(x):
         return 10 * np.log10(np.abs(x)**2)
