@@ -4,3 +4,5 @@
 *.pdf
 *.pyc
 *.coverage
+*.js
+*.html

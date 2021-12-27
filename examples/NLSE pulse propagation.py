@@ -53,10 +53,9 @@ fiber1 = nlse.Fiber(Length * 1e-3, center_wl_nm=fibWL, dispersion_format='GVD',
 results = nlse.NLSE.nlse(pulse, fiber1, raman=Raman, shock=Steep, nsaves=Steps,
                          rtol=rtol, atol=atol)
 
-z, AT, AW, f = results.get_results() # unpack results
+z, f, t, AT, AW = results.get_results() # unpack results
 
 z = z * 1e3  # convert to mm
-t = pulse.t_ps
 
 def dB(num):
     return 10 * np.log10(np.abs(num)**2)
