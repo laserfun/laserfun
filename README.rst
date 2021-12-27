@@ -1,10 +1,10 @@
-😊🚀⚡ laserfun README ⚡🚀😊
+⚡ laserfun README ⚡
 =============================
 Some fun functions for modeling laser pulses in Python. 
 
 Documentation is available at: `laserfun.readthedocs.io <https://laserfun.readthedocs.io/>`__
 
-😋 Introduction
+😊 Introduction
 ---------------
 
 So far, ``laserfun`` consists mainly of:
@@ -13,8 +13,8 @@ So far, ``laserfun`` consists mainly of:
 - The Fiber class, which keeps track of the properties of the fiber, including the dipersion, nonlinearity, length, loss, etc. (By "fiber", we refer to any medium where it is appropriate to model a laser pulse in a single spatial mode which doesnt change over the propagation length. So, optical fibers and optical waveguides would be the most appropriate. Short distances of free-space propagation may also be appropriate, but important effects such as diffraction are ignored.)
 - The NLSE function, which models the propagation of a pulse object through a fiber object according to the generalized nonlinear Schrodinger equation (GNLSE) as described in "Supercontinuum Generation in Optical Fibers" Edited by J. M. Dudley and J. R. Taylor (Cambridge 2010).The GNLSE propagates an optical input field (a laser pulse) through a nonlinear material (a fiber) and takes into account dispersion and Chi-3 nonlinearity.
 
-🚀 Intallation
---------------
+🚀 Intallation 🚀
+------------------
 
 🤔Requirements
 ~~~~~~~~~~~~~~
