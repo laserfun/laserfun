@@ -59,7 +59,7 @@ def test_nlse_spectrum():
                              atol=1e-5, rtol=1e-5, integrator='lsoda',
                              print_status=False)
     
-    z, AT, AW, w = results.get_results()
+    z, f, t, AT, AW = results.get_results()
     dB = 10*np.log10(np.abs(AW[-1])**2)
     path = os.path.split(os.path.realpath(__file__))[0]
     f_prev, dB_prev = np.loadtxt(path+'/nlse_output.txt', delimiter=',', unpack=True, skiprows=1)

@@ -9,8 +9,7 @@ import time
 import nlse
 
 def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
-         raman=False, shock=True, integrator='lsoda', fft_method='scipy',
-         print_status=True):
+         raman=False, shock=True, integrator='lsoda', print_status=True):
     """
     This function propagates an optical input field (often a laser pulse)
     through a nonlinear material using the generalized nonlinear
@@ -27,10 +26,6 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     Dudley (2009). They ask that you cite this chapter in any publications using
     their code.
 
-    2018-02-01 - First Python port by Dan Hickstein (danhickstein@gmail.com)
-    2020-01-11 - General clean up and PEP8
-    2021-12-15 - Changed to accept pulse and fiber object inputs
-
     Parameters
     ----------
     pulse : pulse object
@@ -38,19 +33,23 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     fiber : fiber object
         This defines the media ("fiber") through which the pulse propagates.
     nsaves : int
-        the number of equidistant grid points along the fiber to return
+        The number of equidistant grid points along the fiber to return
         the field. Note that the integrator usually takes finer steps than
         this, the nsaves parameters simply determines what is returned by this
-        function
+        function.
     atol : float
-        absolute tolerance for the integrator. Smaller values produce more
+        Absolute tolerance for the integrator. Smaller values produce more
         accurate results but require longer integration times. 1e-4 works well.
     rtol : float
-        relative tolerance for the integrator. 1e-4 work well. 
+        Relative tolerance for the integrator. 1e-4 work well. 
+    reload_fiber : boolean
+        This determines if the fiber information is reloaded at each step. This
+        should be set to True if the fiber properties (gamma, dispersion) vary
+        as a function of length.
     raman : boolean
-        determines if the Raman effect will be included. Default is False
+        Determines if the Raman effect will be included. Default is False.
     shock : boolean
-        determines if the self-steepening (shock) term will be taken into
+        Determines if the self-steepening (shock) term will be taken into
         account. This is especially important for situations where the
         slowly varying envelope approximation starts to break down, which 
         can occur for large bandwidths (short pulses).
@@ -64,36 +63,24 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         things werereasonable with "method='bdf'"
         For more information, see:
         docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.ode.html
-    fft_method : string
-        Selects the fft method.
-        Default is 'scipy', which uses scipy.fftpack. This is reliably quick
-        on all systems that we've tested. 'numpy' uses numpy.fft, which
-        uses fft functions that depend on the math library installed with python.
-        Anaconda Python generally uses the MKL math library, which is usually faster
-        than scipy.fftpack, but not by too much.
-    reload_fiber : boolean
-        This determines if the fiber information is reloaded at each step. This should be
-        set to True if the fiber properties (gamma, dispersion) vary as a function of length.
+    print_status : boolean
+         This determines if the propagation status will be printed. Default
+         is True.
 
     Returns
     -------
     z : 1D numpy array of length nsaves
-        an array of the z-coordinate along the fiber where the results are
-        returned
+        array of the z-coordinate along the fiber where the results are returned
     AT : 2D numpy array, with dimensions nsaves x n
-        The time domain field at every step. Complex.
+        The complex amplitude of the time domain field at every step.
     AW : 2D numpy array, with dimensions nsaves x n
-        The frequency domain field at every step. Complex.
-    w : 1D numpy array of length n
+        The complex amplitide of the frequency domain field at every step.
+    f : 1D numpy array of length n
         The frequency grid (not angular freq).
     """
 
-    if fft_method == 'numpy':
-        from numpy.fft import fft, ifft, fftshift
-    elif fft_method == 'scipy':
-        from scipy.fftpack import fft, ifft, fftshift
-    else:
-        raise ValueError('fft method not supported.')
+
+    from scipy.fftpack import fft, ifft, fftshift
 
     # get the pulse info from the pulse object:
     t = pulse.t_ps  #  time array in picoseconds
@@ -104,17 +91,16 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     dt = t[1] - t[0]  # time step
     v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
 
-    flength = fiber.length
+    flength = fiber.length  # get length of fiber
     
     def load_fiber(fiber, z=0):
         # gets the fiber info from the fiber object
         gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
         b = fiber.get_B(pulse, z)
         
-        # get alpha and avoid divide-by-zero
-        loss = np.log(10**(fiber.get_alpha(z)*0.1))
+        loss = np.log(10**(fiber.get_alpha(z)*0.1))  # convert from dB/m
         
-        lin_operator = 1j*b - loss*0.5        # linear operator
+        lin_operator = 1j*b - loss*0.5  # linear operator
 
         if w0>0 and shock:          # if w0>0 then include shock
             gamma = gamma/w0
@@ -122,19 +108,19 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         else:
             w = 1 + v*0             # set w to 1 when no shock
 
-        # shift to fft space  -- Back to time domain, right?
+        # some fft shifts to things line up later:
         lin_operator = fftshift(lin_operator)
         w = fftshift(w)
         return lin_operator, w, gamma
 
-    lin_operator, w, gamma = load_fiber(fiber)
+    lin_operator, w, gamma = load_fiber(fiber) # load fiber info
 
     # Raman response:
     if raman == 'dudley' or raman == True:
         fr  =0.18; t1 = 0.0122; t2 = 0.032
         rt = (t1**2+t2**2)/t1/t2**2*np.exp(-t/t2)*np.sin(t/t1)
-        rt[t < 0] = 0           # heaviside step function
-        rw = n * ifft(fftshift(rt))      # frequency domain Raman
+        rt[t < 0] = 0                # heaviside step function
+        rw = n * ifft(fftshift(rt))  # frequency domain Raman
     elif raman == False:
         fr = 0
     else:
@@ -159,13 +145,12 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         r = 1j * gamma * w * m * exp(-lin_operator*z)  # full RHS of Eq. (3.13)
         return r
 
-
     z = linspace(0, flength, nsaves)    # select output z points
-
     aw = ifft(at.astype('complex128'))  # ensure integrator knows it's complex
 
+    # set up the integrator: 
     r = complex_ode(rhs).set_integrator(integrator, atol=atol, rtol=rtol)
-    r.set_initial_value(aw, z[0])  # set up the integrator
+    r.set_initial_value(aw, z[0])  
 
     # intialize array for results:
     AW = np.zeros((z.size, aw.size), dtype='complex128')
@@ -176,8 +161,8 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     for count, zi in enumerate(z[1:]):
 
         if print_status:
-            print('% 6.1f%% complete - %.3e m - %.1f seconds' % ((zi/z[-1])*100, zi,
-                                                        time.time()-start_time))
+            print('% 6.1f%% complete - %.3e m - %.1f seconds' % ((zi/z[-1])*100,
+                  zi, time.time()-start_time))
         if not r.successful():
             raise Exception('Integrator failed! Check the input parameters.')
 
@@ -190,34 +175,74 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         AT[i, :] = fft(AW[i])            # time domain output
         AW[i, :] = fftshift(AW[i])
 
-        # This is the original dudley scaling factor that I believe gives units
+        # Below is the original dudley scaling factor that I think gives units
         # of sqrt(J/Hz) for the AW array. Removing this gives units that agree
-        # with PyNLO, that I guess are sqrt(J*Hz) = sqrt(Watts) -DH 2021-12-15
-
+        # with PyNLO, that seem to be sqrt(J*Hz) = sqrt(Watts) -DH 2021-12-15
         # AW[i, :] = AW[i, :] * dt * n
     
     pulse_out = pulse.create_cloned_pulse()
     pulse_out.at = AT[-1]
     
-    res = PulseData(z, AT, AW, (v + w0)/(2*np.pi), pulse, pulse_out, fiber)
+    res = PulseData(z, AT, AW, pulse, pulse_out, fiber)
 
     return res
 
 class PulseData:
-
-    def __init__(self, z, AT, AW, f, pulse, pulse_out, fiber):
+    """This class holds the data from a pulse propagation. Mainly, it contains 
+    the amplitude of the pulse in the time and frequency domain at each step.
+    
+    Parameters
+    ----------
+    z : array of length n
+        The z-values corresponding the the propagation.
+    AT : 2D array
+        The complex amplitude of the electric field in the time domain at each 
+        position in z.
+    AW : 2D array
+        The complex amplitude of the electric field in the freq. domain at each 
+        position in z.
+    pulse_in : pulse object
+        The input pulse object.
+    pulse_out : pulse object
+        The output pulse object.
+    fiber : fiber object
+        The fiber object that the pulse was propagated through.
+        
+    Attributes
+    ----------
+    z : array of length n
+        The z-values corresponding the the propagation.
+    f : array of length m
+        The values of the frequency grid in THz.
+    t : array of length m
+        The values of time grid in ps
+    AT : 2D array
+        The complex amplitude of the electric field in the time domain at each 
+        position in z.
+    AW : 2D array
+        The complex amplitude of the electric field in the freq. domain at each 
+        position in z.
+    pulse_in : pulse object
+        The input pulse object.
+    pulse_out : pulse object
+        The output pulse object.
+    fiber : fiber object
+        The fiber object that the pulse was propagated through.
+    """
+    def __init__(self, z, AT, AW, pulse_in, pulse_out, fiber):
         self.z = z
         self.AW = AW
         self.AT = AT
-        self.f = f
-        self.pulse_in = pulse
+        self.pulse_in = pulse_in
         self.pulse_out = pulse_out
         self.fiber = fiber
+        self.f = pulse_out.f_THz
+        self.t = pulse_out.t_ps
 
     def get_results(self):
-        return self.z, self.AT, self.AW, self.f
+        return self.z, self.f, self.t, self.AT, self.AW
 
-    def get_amplitude_wavelengths(self, wavemin=None, wavemax=None, waven=None, jacobian=False):
+    def get_amplitude_wavelengths(self, wavemin=None, wavemax=None, waven=None):
         '''
         Re-interpolates the AW array from evenly-spaced frequencies to
         evenly-spaced wavelengths.
@@ -238,7 +263,7 @@ class PulseData:
             If an int, then this is just the number of points.
         '''
 
-        c = constants.value('speed of light in vacuum')*1e9/1e12 # c in nm/ps
+        c = constants.value('speed of light in vacuum')*1e9/1e12  # c in nm/ps
 
         if wavemin == None:
             wavemin = 0.25 * c/self.pulse_in.centerfrequency_THz
@@ -253,11 +278,11 @@ class PulseData:
         NEW_WLS, NEW_Z = np.meshgrid(new_wls, self.z)
         NEW_F = c/NEW_WLS
 
-        # fast interpolation to wavelength grid,
-        # so that we can plot using imshow for fast viewing:
-        # (This requires Scipy > 1.6.0)
+        # fast interpolation to wavelength grid, so that we can plot using
+        # imshow for fast viewing. This requires Scipy > 1.6.0.
         AW_WL = scipy.ndimage.interpolation.map_coordinates(
                     np.abs(self.AW)**2, ((NEW_Z-np.min(self.z))/(self.z[1]-self.z[0]),
                          (NEW_F-np.min(self.f))/(self.f[1]-self.f[0])),
                     order=1, mode='nearest')
+                    
         return new_wls, AW_WL

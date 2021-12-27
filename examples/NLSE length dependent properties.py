@@ -79,10 +79,9 @@ results = nlse.NLSE.nlse(pulse, fiber1,raman=Raman,
                               shock=Steep, nsaves=Steps,
                               atol=atol, rtol=rtol, integrator='lsoda', reload_fiber=True)
 
-z, AT, AW, f = results.get_results() # unpack results
+z, f, t, AT, AW = results.get_results() # unpack results
 
 z = z * 1e3  # convert to mm
-t = pulse.t_ps
 
 def dB(num):
     return 10 * np.log10(np.abs(num)**2)
