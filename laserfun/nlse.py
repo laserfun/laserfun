@@ -1,14 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from numpy import linspace, pi, log10, exp
+from numpy import linspace, pi, log10, exp, sin
 from scipy.special import factorial
 from scipy.integrate import complex_ode
 from scipy import constants
 import scipy.ndimage
 import time
-import nlse
 
-def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
+def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
          raman=False, shock=True, integrator='lsoda', print_status=True):
     """
     This function propagates an optical input field (often a laser pulse)
@@ -85,7 +84,7 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     # get the pulse info from the pulse object:
     t = pulse.t_ps  #  time array in picoseconds
     at = pulse.at   #  amplitude for those times in sqrt(W)
-    w0 = pulse.centerfrequency_THz * 2 * np.pi  # center freq (angular!)
+    w0 = pulse.centerfrequency_THz * 2 * pi  # center freq (angular!)
 
     n = t.size        # number of time/frequency points
     dt = t[1] - t[0]  # time step
@@ -118,7 +117,7 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     # Raman response:
     if raman == 'dudley' or raman == True:
         fr  =0.18; t1 = 0.0122; t2 = 0.032
-        rt = (t1**2+t2**2)/t1/t2**2*np.exp(-t/t2)*np.sin(t/t1)
+        rt = (t1**2+t2**2)/t1/t2**2*exp(-t/t2)*sin(t/t1)
         rt[t < 0] = 0                # heaviside step function
         rw = n * ifft(fftshift(rt))  # frequency domain Raman
     elif raman == False:
@@ -183,32 +182,16 @@ def nlse(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     pulse_out = pulse.create_cloned_pulse()
     pulse_out.at = AT[-1]
     
-    res = PulseData(z, AT, AW, pulse, pulse_out, fiber)
+    res = PulseData(z, AW, AT, pulse, pulse_out, fiber)
 
     return res
 
 class PulseData:
     """This class holds the data from a pulse propagation. Mainly, it contains 
-    the amplitude of the pulse in the time and frequency domain at each step.
+    the amplitude of the pulse in the time and frequency domain at each step. 
+    The following list of parameters is the attributes of the class. 
     
     Parameters
-    ----------
-    z : array of length n
-        The z-values corresponding the the propagation.
-    AT : 2D array
-        The complex amplitude of the electric field in the time domain at each 
-        position in z.
-    AW : 2D array
-        The complex amplitude of the electric field in the freq. domain at each 
-        position in z.
-    pulse_in : pulse object
-        The input pulse object.
-    pulse_out : pulse object
-        The output pulse object.
-    fiber : fiber object
-        The fiber object that the pulse was propagated through.
-        
-    Attributes
     ----------
     z : array of length n
         The z-values corresponding the the propagation.
@@ -229,7 +212,7 @@ class PulseData:
     fiber : fiber object
         The fiber object that the pulse was propagated through.
     """
-    def __init__(self, z, AT, AW, pulse_in, pulse_out, fiber):
+    def __init__(self, z, AW, AT, pulse_in, pulse_out, fiber):
         self.z = z
         self.AW = AW
         self.AT = AT
@@ -240,7 +223,7 @@ class PulseData:
         self.t = pulse_out.t_ps
 
     def get_results(self):
-        return self.z, self.f, self.t, self.AT, self.AW
+        return self.z, self.f, self.t, self.AW, self.AT
 
     def get_amplitude_wavelengths(self, wavemin=None, wavemax=None, waven=None):
         '''
@@ -286,3 +269,67 @@ class PulseData:
                     order=1, mode='nearest')
                     
         return new_wls, AW_WL
+    
+    def plot(self, flim=None, tlim=None, show=True):
+        """
+        Makes a plot of the results in both the time and frequency domain.
+        """
+        
+        # set up plots for the results:
+        fig = plt.figure(figsize=(8,8))
+        ax0 = plt.subplot2grid((3,2), (0, 0), rowspan=1)
+        ax1 = plt.subplot2grid((3,2), (0, 1), rowspan=1)
+        ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
+        ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
+
+        z = self.z * 1e3  # convert to mm
+
+        def dB(num):
+            return 10 * np.log10(np.abs(num)**2, where=np.abs(num)**2 > 0 )
+
+        IW_dB = dB(self.AW)
+        IT_dB = dB(self.AT)
+
+        ax0.plot(self.f, dB(self.pulse_in.aw), color = 'b', label='Initial pulse')
+        ax1.plot(self.t, dB(self.pulse_in.at), color = 'b', label='Initial pulse')
+
+        ax0.plot(self.f, dB(self.pulse_out.aw), color='r', label='Final pulse')
+        ax1.plot(self.t, dB(self.pulse_out.at), color='r', label='Final pulse')
+
+        ax1.legend(loc='upper left', fontsize=9)
+
+        ax0.set_xlabel('Frequency (THz)')
+        ax1.set_xlabel('Time (ps)')
+
+        ax0.set_ylabel('Intensity (dB)')
+        ax0.set_ylim(np.max(dB(self.pulse_in.aw)) - 100,  np.max(dB(self.pulse_in.aw)) + 10)
+        ax1.set_ylim(np.max(dB(self.pulse_in.at)) - 100,  np.max(dB(self.pulse_in.at)) + 10)
+        
+        ax2.set_ylabel('Propagation distance (mm)')
+        ax2.set_xlabel('Frequency (THz)')
+        
+        # shuold automate the xlims somehow:
+        if tlim == None:
+            ax1.set_xlim(-1.5, 1.5)
+        if flim == None:
+            ax2.set_xlim(0, 400)
+
+        extf = (np.min(self.f), np.max(self.f), np.min(z), np.max(z))
+        extt = (np.min(self.t), np.max(self.t), np.min(z), np.max(z))
+
+        ax2.imshow(IW_dB, extent=extf, vmin=np.max(IW_dB) - 40.0, vmax=np.max(IW_dB), aspect='auto', origin='lower')
+        ax3.imshow(IT_dB, extent=extt, vmin=np.max(IT_dB) - 40.0, vmax=np.max(IT_dB), aspect='auto', origin='lower')
+
+        ax3.set_xlabel('Time (ps)')
+
+        fig.tight_layout()
+        
+        if show:
+            plt.show()
+        
+        
+        
+        
+        
+        
+        

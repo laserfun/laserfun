@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import nlse
+import laserfun as lf
 
 FWHM    = 0.050  # pulse duration (ps)
 pulseWL = 1550   # pulse central wavelength (nm)
@@ -96,7 +96,6 @@ ax0.plot(f, IW_dB[-1], color='r', label='Final pulse')
 ax1.plot(t, IT_dB[-1], color='r', label='Final pulse')
 
 ax1.legend(loc='upper left', fontsize=9)
-
 
 ax0.set_xlabel('Frequency (THz)')
 ax1.set_xlabel('Time (ps)')
