@@ -1,5 +1,5 @@
-nlse package
-============
+🎁 laserfun package
+===================
 
     
 laserfun.nlse module

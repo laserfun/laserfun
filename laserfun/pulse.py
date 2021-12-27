@@ -325,12 +325,7 @@ class Pulse:
                                    1j * (TOD / 6.0) * V**3+ 
                                    1j * (FOD / 24.0) * V**4) * self.AW 
                                    
-    def apply_phase_W(self, phase):
-        self.aw = self.aw * np.exp(1j*phase)
-        
-    def chirp_pulse_T(self, chirp2, chirp3, T0):
-        self.at = self.at * np.exp(-1j * (chirp2 / 2.0) * (self.t_ps/T0)**2 + 
-                                 -1j * (chirp3 / 3.0) * (self.t_ps/T0)**3) 
+
 
 def FFT_t(A,ax=0):
     """A FFT function that takes care of the fft-shifting."""
