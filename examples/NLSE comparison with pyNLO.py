@@ -52,13 +52,12 @@ t_start = time.time()
 results = lf.NLSE(pulse, fiber1, raman=Raman,
                               shock=Steep, nsaves=Steps,
                               atol=1e-5, rtol=1e-5, integrator='lsoda', reload_fiber=False)
-z, f, t, AT, AW, w = results.get_results()
+z, f, t, AW, AT = results.get_results()
 
 
 t_nlse = time.time() - t_start
 
 z = z * 1e3  # convert to mm
-f = w
 IW_dB = 10*np.log10(np.abs(AW)**2)
 IT_dB = 10*np.log10(np.abs(AT)**2)
 
