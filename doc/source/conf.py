@@ -4,12 +4,14 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+
 # -- Path setup --------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+from unittest.mock import MagicMock
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
@@ -52,4 +54,13 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+MOCK_MODULES = ['numpy', 'scipy.interpolate', 'scipy.integrate',
+                'scipy.special', 'scipy.ndimage', 'scipy.fftpack']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 html_static_path = []
