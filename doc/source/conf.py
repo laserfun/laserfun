@@ -12,6 +12,8 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import sphinx_rtd_theme
+import os
+import sys
 
 
 from unittest.mock import MagicMock
@@ -25,8 +27,7 @@ MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'scipy.constants', 'scipy.interp
                 'scipy.special', 'scipy.ndimage', 'scipy.fftpack']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
-import os
-import sys
+
 sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
