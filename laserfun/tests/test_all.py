@@ -93,4 +93,8 @@ if __name__ == '__main__':
     test_nlse_loss()
     test_nlse_spectrum()
     test_fiber()
+    print('Testing examples...')
+    import sys
+    sys.path.append(__file__+'../../examples')
+    import examples
     print('Tests complete!')
