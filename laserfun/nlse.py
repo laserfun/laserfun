@@ -252,14 +252,14 @@ class PulseData:
             AW = np.abs(self.AW)**2
             AT = np.abs(self.AT)**2
         elif datatype == 'dB':
-            AW = 10*np.log10(np.abs(self.AW)**2)
-            AT = 10*np.log10(np.abs(self.AT)**2)
+            AW = dB(self.AW)
+            AT = dB(self.AT)
         else:
             raise ValueError('datatype not recognized.')
 
         return self.z, self.f, self.t, AW, AT
 
-    def get_results_wavelength(self, wavemin=None, wavemax=None, waven=None,
+    def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
                                datatype='amplitude'):
         """Get results on a wavelength grid.
 
@@ -268,15 +268,15 @@ class PulseData:
 
         Parameters
         ----------
-        wavemin : float or None
+        wmin : float or None
             the minimum wavelength for the re-interpolation grid.
             If None, it defaults to 0.25x the center wavelength of the pulse.
             If a float, this is the minimum wavelength of the pulse in nm
-        wavemax : float or None
+        wmax : float or None
             the minimum wavelength for the re-interpolation grid.
             If None, it defaults to 4x the center wavelength of the pulse.
             If a float, this is the maximum wavelength of the pulse in nm
-        waven : int or None
+        wn : int or None
             number of wavelengths for the re-interpolation grid.
             If None, it defaults to the number of points in AW multiplied by 2
             If an int, then this is just the number of points.
@@ -304,14 +304,14 @@ class PulseData:
 
         c_nmps = constants.value('speed of light in vacuum')*1e9/1e12
 
-        if wavemin is None:
-            wavemin = 0.25 * c_nmps/self.pulse_in.centerfrequency_THz
-        if wavemax is None:
-            wavemax = 4.0 * c_nmps/self.pulse_in.centerfrequency_THz
-        if waven is None:
-            waven = AW.shape[1] * 2
+        if wmin is None:
+            wmin = 0.25 * c_nmps/self.pulse_in.centerfrequency_THz
+        if wmax is None:
+            wmax = 4.0 * c_nmps/self.pulse_in.centerfrequency_THz
+        if wn is None:
+            wn = AW.shape[1] * 2
 
-        new_wls = np.linspace(wavemin, wavemax, waven)
+        new_wls = np.linspace(wmin, wmax, wn)
 
         NEW_WLS, NEW_Z = np.meshgrid(new_wls, z)
         NEW_F = c_nmps/NEW_WLS
@@ -334,9 +334,6 @@ class PulseData:
         ax3 = plt.subplot2grid((3, 2), (1, 1), rowspan=2, sharex=ax1)
 
         z = self.z * 1e3  # convert to mm
-
-        def dB(num):
-            return 10 * np.log10(np.abs(num)**2, where=np.abs(num)**2 > 0)
 
         IW_dB = dB(self.AW)
         IT_dB = dB(self.AT)
@@ -381,3 +378,7 @@ class PulseData:
 
         if show:
             plt.show()
+
+def dB(num):
+    with np.errstate(divide='ignore'):
+        return 10 * np.log10(np.abs(num)**2)

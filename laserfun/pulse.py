@@ -329,11 +329,13 @@ class Pulse:
 
 def FFT_t(A, ax=0):
     """Do a FFT with fft-shifting."""
+    A = A.astype('complex128')
     return fft.ifftshift(fft.ifft(fft.fftshift(A, axes=(ax,)),
                                   axis=ax), axes=(ax,))
 
 
 def IFFT_t(A, ax=0):
-    """DO an iFFT with fft-shifting."""
+    """Do an iFFT with fft-shifting."""
+    A = A.astype('complex128')
     return fft.ifftshift(fft.fft(fft.fftshift(A, axes=(ax,)),
                                  axis=ax), axes=(ax,))
