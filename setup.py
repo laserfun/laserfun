@@ -1,18 +1,21 @@
 #!/usr/bin/env python
 from setuptools import setup
 import os
-
-on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
-
-if not on_rtd:
-    import numpy as np
-    install_requires=[
-          "numpy>=1.15.0",
-          "scipy>=1.6.0"
-          ]
-else:
-    np = None
-    install_requires=[]
+install_requires=[
+      "numpy>=1.15.0",
+      "scipy>=1.6.0"
+      ]
+# on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+#
+# if not on_rtd:
+#     import numpy as np
+#     install_requires=[
+#           "numpy>=1.15.0",
+#           "scipy>=1.6.0"
+#           ]
+# else:
+#     np = None
+#     install_requires=[]
 
 setup(name='laserfun',
       version='0.0.1',
