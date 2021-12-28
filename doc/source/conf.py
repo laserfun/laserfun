@@ -14,16 +14,16 @@
 import sphinx_rtd_theme
 
 
-# from unittest.mock import MagicMock
-#
-# class Mock(MagicMock):
-#     @classmethod
-#     def __getattr__(cls, name):
-#         return MagicMock()
-#
-# MOCK_MODULES = ['numpy', 'scipy.interpolate', 'scipy.integrate',
-#                 'scipy.special', 'scipy.ndimage', 'scipy.fftpack', 'scipy']
-# sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+from unittest.mock import MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'scipy.interpolate', 'scipy.integrate',
+                'scipy.special', 'scipy.ndimage', 'scipy.fftpack']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 import os
 import sys
