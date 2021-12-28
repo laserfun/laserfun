@@ -61,6 +61,7 @@ class Mock(MagicMock):
         return MagicMock()
 
 MOCK_MODULES = ['numpy', 'scipy.interpolate', 'scipy.integrate',
-                'scipy.special', 'scipy.ndimage', 'scipy.fftpack', 'scipy']
+                'scipy.special', 'scipy.ndimage', 'scipy.fftpack', 'scipy',
+                'numpy.core.multiarray']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 html_static_path = []
