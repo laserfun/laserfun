@@ -11,12 +11,24 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-from unittest.mock import MagicMock
+import sphinx_rtd_theme
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../'))
 
-import sphinx_rtd_theme
+
+from unittest.mock import MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.constants', 'scipy.interpolate', 'scipy.integrate',
+                'scipy.special', 'scipy.ndimage', 'scipy.fftpack']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+
+
+sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
 
@@ -55,12 +67,4 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
 
-class Mock(MagicMock):
-    @classmethod
-    def __getattr__(cls, name):
-        return MagicMock()
-
-MOCK_MODULES = ['numpy', 'scipy.interpolate', 'scipy.integrate',
-                'scipy.special', 'scipy.ndimage', 'scipy.fftpack']
-sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 html_static_path = []
