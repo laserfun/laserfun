@@ -6,5 +6,6 @@ from . import nlse
 from .fiber import Fiber
 from .pulse import Pulse
 from .nlse import NLSE
+from .nlse import dB
 
 __all__ = [pulse, fiber, nlse, Fiber, Pulse, NLSE]

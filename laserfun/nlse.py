@@ -360,9 +360,14 @@ class PulseData:
 
         # Should automate the xlims somehow
         if tlim is None:
-            ax1.set_xlim(-1.5, 1.5)
+            tlim = (-1.5, 1.5)
         if flim is None:
-            ax2.set_xlim(0, 400)
+            flim = (0, 400)
+
+        ax2.set_xlim(flim[0], flim[1])
+
+        ax1.set_xlim(tlim[0], tlim[1])
+
 
         extf = (np.min(self.f), np.max(self.f), np.min(z), np.max(z))
         extt = (np.min(self.t), np.max(self.t), np.min(z), np.max(z))
@@ -378,6 +383,9 @@ class PulseData:
 
         if show:
             plt.show()
+
+        axs = (ax0, ax1, ax2, ax3)
+        return fig, axs
 
 def dB(num):
     with np.errstate(divide='ignore'):
