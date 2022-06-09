@@ -1,4 +1,4 @@
-"""Run and example of NLSE with length-varying fiber properties."""
+"""Example of NLSE with length-varying fiber properties."""
 
 import laserfun as lf
 
