@@ -325,8 +325,30 @@ class PulseData:
 
         return z, new_wls, t, AW_WLS, AT
 
-    def plot(self, flim=None, tlim=None, show=True):
-        """Plot the results in both the time and frequency domain."""
+    def plot(self, flim=30, tlim=30, margin=0.2, show=True):
+        """Plot the results in both the time and frequency domain.
+
+        parameters
+        ----------
+        flim : float or array of length 2
+            This sets the xlimits of the frequency domain plot. If this is a
+            single number, it defines the dB level at which the plot will be set
+            (with a margin). If an array of two values, this manually sets
+            the xlims.
+        tlim : float or array of length 2
+            Same as flim, but for the time domain.
+        margin : float
+            Fraction to pad the xlimits. Default is 0.2.
+        show : boolean
+
+        Returns
+        -------
+        fig : matplotlib.figure object
+            The figure object so that modifications can be made.
+        axs : an 2x2 array of axes objects
+            The axes objects, so that modifications can be made.
+            For example: axs[0, 1].set_xlim(0, 1000)
+        """
         fig = plt.figure(figsize=(8, 8))
         ax0 = plt.subplot2grid((3, 2), (0, 0), rowspan=1)
         ax1 = plt.subplot2grid((3, 2), (0, 1), rowspan=1)
@@ -358,17 +380,6 @@ class PulseData:
         ax2.set_ylabel('Propagation distance (mm)')
         ax2.set_xlabel('Frequency (THz)')
 
-        # Should automate the xlims somehow
-        if tlim is None:
-            tlim = (-1.5, 1.5)
-        if flim is None:
-            flim = (0, 400)
-
-        ax2.set_xlim(flim[0], flim[1])
-
-        ax1.set_xlim(tlim[0], tlim[1])
-
-
         extf = (np.min(self.f), np.max(self.f), np.min(z), np.max(z))
         extt = (np.min(self.t), np.max(self.t), np.min(z), np.max(z))
 
@@ -381,10 +392,32 @@ class PulseData:
 
         fig.tight_layout()
 
+        # set xlims:
+        def find_width_and_center(x, y, offset=10):
+            def find_roots(x, y):
+                s = np.abs(np.diff(np.sign(y))).astype(bool)
+                return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
+
+            roots = find_roots(x, y - np.max(y) + offset)
+            width = np.max(roots) - np.min(roots)
+            center = (np.max(roots) + np.min(roots)) * 0.5
+            return width, center
+
+        if not hasattr(flim, "__len__"):
+            w, c = find_width_and_center(self.f, dB(self.pulse_out.aw), flim)
+            flim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
+
+        if not hasattr(tlim, "__len__"):
+            w, c = find_width_and_center(self.t, dB(self.pulse_out.at), tlim)
+            tlim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
+
+        ax2.set_xlim(flim[0], flim[1])
+        ax1.set_xlim(tlim[0], tlim[1])
+
         if show:
             plt.show()
 
-        axs = (ax0, ax1, ax2, ax3)
+        axs = np.array([[ax0, ax1], [ax2, ax3]])
         return fig, axs
 
 def dB(num):
