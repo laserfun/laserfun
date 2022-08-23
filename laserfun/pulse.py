@@ -326,6 +326,42 @@ class Pulse:
                              1j * (TOD / 6.0) * V**3 +
                              1j * (FOD / 24.0) * V**4) * self.AW
 
+    def calc_width(self, level=0.5):
+        """Calculates the pulse width. For example, the full-width-at-half-maxmimum
+        (FWHM) or the 1/e width. If the pulse has multiple crossings (for example,
+        if it reaches the 0.5 level multiple times) the widest extent will be
+        returned.
+
+        Parameters
+        ----------
+        level : float
+            the fraction of the peak to calculate the width. 
+            Must be between 0 and 1.
+            Default is 0.5, which provides the FWHM.
+            1/e = 0.367879
+            1/e^2 = 0.135335
+
+        Returns
+        -------
+        width : float
+            the width of the pulse in picoseconds.
+        """
+    
+        def find_roots(x, y):
+            s = np.abs(np.diff(np.sign(y))).astype(bool)
+            return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
+        
+        it = np.abs(self.at)**2
+        it = it/np.max(it)
+        roots = find_roots(self.t_ps, it - level)
+        width = np.max(roots) - np.min(roots)
+        return(width)
+    
+    def transform_limit(self):
+        newpulse = self.create_cloned_pulse()
+        newpulse.aw = np.abs(newpulse.aw)
+        return newpulse
+    
 
 def FFT_t(A, ax=0):
     """Do a FFT with fft-shifting."""
@@ -339,3 +375,6 @@ def IFFT_t(A, ax=0):
     A = A.astype('complex128')
     return fft.ifftshift(fft.fft(fft.fftshift(A, axes=(ax,)),
                                  axis=ax), axes=(ax,))
+                                 
+
+    
