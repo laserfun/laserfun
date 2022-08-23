@@ -260,7 +260,7 @@ class PulseData:
         return self.z, self.f, self.t, AW, AT
 
     def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
-                               datatype='amplitude'):
+                               datatype='intensity'):
         """Get results on a wavelength grid.
 
         Re-interpolates the AW array from evenly-spaced frequencies to
@@ -284,7 +284,7 @@ class PulseData:
             Determines if the data in the AW and AT arrays is
             intensity (abs(amplitude)^2), or dB (10*log10(intensity)).
             Can be ``'intensity'``, or ``'dB'``. Note that ``'amplitude'```
-            is not an option because interpolation on a rapidly varying
+            is not recommended because interpolation on a rapidly varying
             complex function isn't reliable.
 
         Returns
@@ -325,7 +325,7 @@ class PulseData:
 
         return z, new_wls, t, AW_WLS, AT
 
-    def plot(self, flim=30, tlim=30, margin=0.2, show=True):
+    def plot(self, flim=30, tlim=50, margin=0.2, wavelength=False, show=True):
         """Plot the results in both the time and frequency domain.
 
         parameters
@@ -339,7 +339,11 @@ class PulseData:
             Same as flim, but for the time domain.
         margin : float
             Fraction to pad the xlimits. Default is 0.2.
+        wavelength : boolean
+            Determines if the "frequency" domain will be displayed in Frequency
+            (THz) or wavelength (nm).
         show : boolean
+            determines if plt.show() will be called to show the plot
 
         Returns
         -------
@@ -357,35 +361,45 @@ class PulseData:
 
         z = self.z * 1e3  # convert to mm
 
-        IW_dB = dB(self.AW)
-        IT_dB = dB(self.AT)
+        if wavelength:
+            ax0.set_xlabel('Wavelength (nm)')
+            ax2.set_xlabel('Wavelength (nm)')
+            junkz, f, t, IW, AT = self.get_results_wavelength()
+            IW_dB = 10*np.log10(IW)
+            IT_dB = dB(AT)
 
-        ax0.plot(self.f, dB(self.pulse_in.aw), color='b', label='Initial')
-        ax1.plot(self.t, dB(self.pulse_in.at), color='b', label='Initial')
+        else:
+            ax0.set_xlabel('Frequency (THz)')
+            ax2.set_xlabel('Frequency (THz)')
+            f = self.f
+            t = self.t
+            IW_dB = dB(self.AW)
+            IT_dB = dB(self.AT)
 
-        ax0.plot(self.f, dB(self.pulse_out.aw), color='r', label='Final')
-        ax1.plot(self.t, dB(self.pulse_out.at), color='r', label='Final')
+        ax0.plot(f, IW_dB[0], color='b', label='Initial')
+        ax1.plot(t, IT_dB[0], color='b', label='Initial')
+
+        ax0.plot(f, IW_dB[-1], color='r', label='Final')
+        ax1.plot(t, IT_dB[-1], color='r', label='Final')
 
         ax1.legend(loc='upper left', fontsize=9)
 
-        ax0.set_xlabel('Frequency (THz)')
         ax1.set_xlabel('Time (ps)')
 
         ax0.set_ylabel('Intensity (dB)')
-        ax0.set_ylim(np.max(dB(self.pulse_in.aw)) - 100,
-                     np.max(dB(self.pulse_in.aw)) + 10)
-        ax1.set_ylim(np.max(dB(self.pulse_in.at)) - 100,
-                     np.max(dB(self.pulse_in.at)) + 10)
+        ax0.set_ylim(np.max(IW_dB[0]) - 100,
+                     np.max(IW_dB[0]) + 10)
+        ax1.set_ylim(np.max(IT_dB[-1]) - 100,
+                     np.max(IT_dB[-1]) + 10)
 
         ax2.set_ylabel('Propagation distance (mm)')
-        ax2.set_xlabel('Frequency (THz)')
 
-        extf = (np.min(self.f), np.max(self.f), np.min(z), np.max(z))
-        extt = (np.min(self.t), np.max(self.t), np.min(z), np.max(z))
+        extf = (np.min(f), np.max(f), np.min(z), np.max(z))
+        extt = (np.min(t), np.max(t), np.min(z), np.max(z))
 
         ax2.imshow(IW_dB, extent=extf, vmin=np.max(IW_dB) - 40.0,
                    vmax=np.max(IW_dB), aspect='auto', origin='lower')
-        ax3.imshow(IT_dB, extent=extt, vmin=np.max(IT_dB) - 40.0,
+        ax3.imshow(IT_dB, extent=extt, vmin=np.max(IT_dB) - 80.0,
                    vmax=np.max(IT_dB), aspect='auto', origin='lower')
 
         ax3.set_xlabel('Time (ps)')
@@ -398,27 +412,97 @@ class PulseData:
                 s = np.abs(np.diff(np.sign(y))).astype(bool)
                 return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
 
-            roots = find_roots(x, y - np.max(y) + offset)
-            width = np.max(roots) - np.min(roots)
-            center = (np.max(roots) + np.min(roots)) * 0.5
+            try:
+                roots = find_roots(x, y - np.max(y) + offset)
+                width = np.max(roots) - np.min(roots)
+                center = (np.max(roots) + np.min(roots)) * 0.5
+            except:
+                width = np.max(x) - np.min(x)
+                center = (np.max(x) + np.min(x)) * 0.5
             return width, center
 
         if not hasattr(flim, "__len__"):
-            w, c = find_width_and_center(self.f, dB(self.pulse_out.aw), flim)
+            w, c = find_width_and_center(f, IW_dB[-1], flim)
             flim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
 
         if not hasattr(tlim, "__len__"):
-            w, c = find_width_and_center(self.t, dB(self.pulse_out.at), tlim)
+            w, c = find_width_and_center(t, IT_dB[-1], tlim)
             tlim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
 
         ax2.set_xlim(flim[0], flim[1])
-        ax1.set_xlim(tlim[0], tlim[1])
+        ax3.set_xlim(tlim[0], tlim[1])
 
         if show:
             plt.show()
 
         axs = np.array([[ax0, ax1], [ax2, ax3]])
         return fig, axs
+
+
+    def calc_coherence(self, pulse_in, fiber, num_trials=5, random_seed=None,
+                       noise_type='one_photon_freq', **nlse_kwargs):
+        """
+        This function runs several nlse simulations (given by num_trials), each
+        time adding random noise to the pulse. By comparing the electric fields
+        of the different pulses, an estimate of the coherence can be made.
+
+        Parameters
+        ----------
+        pulse_in : pulse object
+
+        num_trials : int
+            this determines the number of trials to be run.
+
+        random_seed : int
+            this is the seed for the random noise generation. Default is None, which does not set a seed for the random
+            number generator, which means that the numbers will be completely randomized.
+            Setting the seed to a number (i.e., random_seed=0) will still generate random numbers for each trial,
+            but the results from calculate_coherence will be completely repeatable.
+
+        noise_type : str
+            this specifies the method for including random noise onto the pulse.
+            see :func:`pynlo.light.PulseBase.Pulse.add_noise` for the different methods.
+
+        Returns
+        -------
+        g12W : 2D numpy array
+            This 2D array gives the g12 parameter as a function of propagation distance and the frequency.
+            g12 gives a measure of the coherence of the pulse by comparing several different trials.
+
+        results : list of results for each trial
+            This is a list, where each item of the list contains (z_positions, AW, AT, pulse_out), the results
+            obtained from :func:`pynlo.interactions.FourWaveMixing.SSFM.propagate`.
+        """
+
+        results = []
+        for num in range(0, num_trials):
+
+            pulse = pulse_in.create_cloned_pulse()
+            pulse.add_noise(noise_type=noise_type)
+
+            y, AW, AT, pulse_out = self.propagate(pulse_in=pulse, fiber=fiber, n_steps=n_steps)
+
+            results.append((y, AW, AT, pulse_in, pulse_out))
+
+
+        for n1, (y, E1, AT, pulsein, pulseout) in enumerate(results):
+            for n2, (y, E2, AT, pulsein, pulseout) in enumerate(results):
+                if n1 == n2: continue # don't compare the same trial
+
+                g12 = np.conj(E1)*E2/np.sqrt(np.abs(E1)**2 * np.abs(E2)**2)
+                if 'g12_stack' not in locals():
+                    g12_stack = g12
+                else:
+                    g12_stack = np.dstack((g12, g12_stack))
+
+
+        # print g12_stack.shape, g12_stack.transpose().shape
+        g12W = np.abs(np.mean(g12_stack, axis=2))
+
+        return g12W, results
+
+
+
 
 def dB(num):
     with np.errstate(divide='ignore'):
