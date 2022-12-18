@@ -9,6 +9,9 @@ import scipy.ndimage
 import time
 from scipy.fftpack import fft, ifft, fftshift
 
+# speed of light in m/s and nm/ps
+c_mks = 299792458.0
+c_nmps = c_mks * 1e9/1e12
 
 def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
          raman=False, shock=True, integrator='lsoda', print_status=True):
@@ -195,9 +198,9 @@ class PulseData:
     ----------
     z : array of length n
         The z-values corresponding the the propagation.
-    f : array of length m
+    f_THz : array of length m
         The values of the frequency grid in THz.
-    t : array of length m
+    t_ps : array of length m
         The values of time grid in ps
     AT : 2D array
         The complex amplitude of the electric field in the time domain at each
@@ -220,47 +223,146 @@ class PulseData:
         self.pulse_in = pulse_in
         self.pulse_out = pulse_out
         self.fiber = fiber
-        self.f = pulse_out.f_THz
-        self.t = pulse_out.t_ps
+        self.f_THz = pulse_out.f_THz
+        self.t_ps = pulse_out.t_ps
 
-    def get_results(self, datatype='amplitude'):
-        """Get the main results of the NLSE propagation.
+    def get_results(self, data_type='amplitude', rep_rate=1):
+        """Get the frequency domain (AW) and time domain (AT) results of the
+        NLSE propagation. Also provides the length (z), frequnecy (f), and time
+        (t) arrays. 
+        
+        ``'amplitude'`` - Native units for the NLSE, AT and AW are sqrt(W).
+        Does NOT consider the rep-rate.
+        
+        ``'intensity'`` - Absolute value of amplitude squared. These units make
+        some sense for AT, since they are J/sec, so integrating over the pulse
+        works as expected. Units for AW are J*Hz, so be careful when 
+        integrating. Does NOT consider rep-rate.
+        
+        ``'mW/bin'`` - AW and AT are in mW per bin, so naive summing provides
+        average power (in mW). Rep-rate taken into account. 
+        
+        ``'mW/THz'`` - returns AT in units of mW/THz and AT in mW/ps. Rep-rate
+        taken into account.
+        
+        ``'dBm/THz'`` - returns AT in units of mW/THz and AT in dBm/ps.
+        Rep-rate taken into account.
+        
+        ``'mW/nm'`` - returns AT in units of mW/nm and AT in mW/ps. Rep-rate
+        taken into account.
+        
+        ``'dBm/nm'`` - returns AW in units of dBm/nm and AT in dBm/ps. Rep-rate
+        taken into account. 
+        
+        In the above, dBm is 10*log10(mW).
+        
+        Note that, for the "per nm" situations, AW is still
+        returned on a grid of even *frequencies*, so the uneven wavelength
+        spacing should be taken into account when integrating. Use
+        ``get_results_wavelength`` to re-interpolate to an evenly spaced
+        wavelength grid.
+        
+        In order to get per-pulse numbers for all methods, simple set the rep-
+        rate to 1.
+        
 
         Parameters
         ----------
         data_type : 'string'
-            Determines if the data in the AW and AT arrays is amplitude,
-            intensity (abs(amplitude)^2), or dB (10*log10(intensity)).
-            Can be ``'amplitude'``, ``'intensity'``, or ``'dB'``
+            Determines the units for the returned AW and AT arrays. 
+        
+        rep_rate : float
+            The repetition rate of the pulses for calculation of average power 
+            units. Does not affect the "amplitude" or "intensity" calculations,
+            but scales all other calculations. 
 
         Returns
         -------
         z : 1D numpy array of length nsaves
-            Array of the z-coordinate along fiber.
-        f : 1D numpy array of length n.
-            The frequency grid (not angular freq).
-        t : 1D numpy array of length n
-            The temporal grid.
+            Array of the z-coordinate along fiber, units of meters.
+        f_THz : 1D numpy array of length n.
+            The frequency grid (not angular freq) in THz.
+        t_ps : 1D numpy array of length n
+            The temporal grid in ps.
         AW : 2D numpy array, with dimensions nsaves x n
             The complex amplitide of the frequency domain field at every step.
         AT : 2D numpy array, with dimensions nsaves x n
             The complex amplitude of the time domain field at every step.
         """
-        if datatype == 'amplitude':
+        
+        if data_type == 'amplitude':
             AW, AT = self.AW, self.AT
-        elif datatype == 'intensity':
+            
+        elif data_type == 'intensity':
             AW = np.abs(self.AW)**2
             AT = np.abs(self.AT)**2
-        elif datatype == 'dB':
+            
+        elif data_type == 'dB':
             AW = dB(self.AW)
             AT = dB(self.AT)
-        else:
-            raise ValueError('datatype not recognized.')
+            
+        elif (data_type == 'mW/bin' or data_type == 'mW/THz' or
+             data_type == 'dBm/THz' or data_type == 'mW/nm' or
+             data_type == 'dBm/nm'):
 
-        return self.z, self.f, self.t, AW, AT
+            z = self.z
+            f = self.pulse_in.f_THz
+            df = (f[1]-f[0]) * 1e12  # df in Hz
+            
+            # per bin units:
+            J_Hz = np.abs(self.AW)**2
+            J_per_bin = J_Hz / df  # go from J*Hz/bin (native units) to J/bin
+            # multiply by rep rate to get W/bin, and then mW/bin:
+            mW_per_bin = J_per_bin * rep_rate * 1e3  
+            
+            # per THz units:
+            mW_per_THz = mW_per_bin / (df * 1e-12)
+            dBm_per_THz = 10 * np.log10(mW_per_THz)
+                
+            # per wavelength units
+            wl_nm = c_nmps / f
+            wl_m = wl_nm * 1e-9 
+            nm_per_bin = wl_m**2 / c_mks * df * 1e9  # Jacobian from THz to nm
+            NM_PER_BIN, Z = np.meshgrid(nm_per_bin, z)
+            mW_per_nm = mW_per_bin / NM_PER_BIN    # convert to mW/nm
+            dBm_per_nm = 10 * np.log10(mW_per_nm)  # convert to dBm/nm
+            
+            # AT conversion
+            t = self.pulse_in.t_ps
+            dt = (t[1] - t[0]) * 1e-12
+            # convert from J/sec to J by mutiplying by dt
+            AT_J_per_bin = np.abs(self.AT)**2 * dt
+            # convert J/bin to mW/bin by multiplying by rep rate * 1e3
+            AT_mW_per_bin =  AT_J_per_bin * rep_rate * 1e3
+            AT_mW_per_ps = AT_mW_per_bin / (dt * 1e12)
+            AT_dBm_per_ps = 10*np.log10(AT_mW_per_ps)
+
+            if   data_type == 'mW/bin':
+                AW = mW_per_bin
+                AT = AT_mW_per_bin
+            elif data_type == 'mW/THz':
+                AW = mW_per_THz
+                AT = AT_mW_per_ps
+            elif data_type == 'dBm/THz':
+                AW = dBm_per_THz
+                AT = AT_dBm_per_ps
+            elif data_type == 'mW/nm':
+                AW = mW_per_nm
+                AT = AT_mW_per_ps
+            elif data_type == 'dBm/nm':
+                AW = dBm_per_nm
+                AT = AT_dBm_per_ps
+            else:
+                raise ValueError('Units not recognized.')
+        
+        else:
+            raise ValueError('data_type not recognized.')
+
+        return self.z, self.f_THz, self.t_ps, AW, AT
+
 
     def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
-                               datatype='intensity'):
+                               data_type='intensity'):
         """Get results on a wavelength grid.
 
         Re-interpolates the AW array from evenly-spaced frequencies to
@@ -281,11 +383,11 @@ class PulseData:
             If None, it defaults to the number of points in AW multiplied by 2
             If an int, then this is just the number of points.
         data_type : 'string'
-            Determines if the data in the AW and AT arrays is
-            intensity (abs(amplitude)^2), or dB (10*log10(intensity)).
-            Can be ``'intensity'``, or ``'dB'``. Note that ``'amplitude'```
-            is not recommended because interpolation on a rapidly varying
-            complex function isn't reliable.
+            Determines the units for the AW and AT arrays. See the
+            documentation for the ``get_results`` function for more
+            information. Note that ``data_type='amplitude'`` is supported but
+            not recommended because interpolation on the rapidly varying grid 
+            of complex values can lead to inconsistent results. 
 
         Returns
         -------
@@ -300,7 +402,7 @@ class PulseData:
         AT : 2D numpy array, with dimensions nsaves x n
             The complex amplitude of the time domain field at every step.
         """
-        z, f, t, AW, AT = self.get_results(datatype=datatype)
+        z, f, t, AW, AT = self.get_results(data_type=data_type)
 
         c_nmps = constants.value('speed of light in vacuum')*1e9/1e12
 
