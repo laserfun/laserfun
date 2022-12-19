@@ -473,8 +473,8 @@ class PulseData:
         else:
             ax0.set_xlabel('Frequency (THz)')
             ax2.set_xlabel('Frequency (THz)')
-            f = self.f
-            t = self.t
+            f = self.f_THz
+            t = self.t_ps
             IW_dB = dB(self.AW)
             IT_dB = dB(self.AT)
 

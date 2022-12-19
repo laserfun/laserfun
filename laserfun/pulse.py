@@ -271,10 +271,6 @@ class Pulse:
         size of the wavelength bins to recover the correct value for the
         average power. The psd_wavelength function provides both the evenly
         spaced wavelength grid and the y-axis unit conversion.
-        
-        Note also that setting the rep rate to 1 and units to ``'mW'`` provides
-        the "mW per mode" for an optical frequency comb.
-
 
         Parameters
         ----------
