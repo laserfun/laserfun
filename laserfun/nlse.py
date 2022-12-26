@@ -474,7 +474,7 @@ class PulseData:
         z = self.z * 1e3  # convert to mm
 
         if units == 'amplitude':
-            raise valueError('Cannot plot amplitude.',
+            raise ValueError('Cannot plot amplitude.',
                              'Use intensity or other units.')
         elif units == 'intensity':
             funits = 'J * Hz'
