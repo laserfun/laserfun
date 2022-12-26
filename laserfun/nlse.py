@@ -230,18 +230,18 @@ class PulseData:
     def get_results(self, data_type='amplitude', rep_rate=1):
         """Get the frequency domain (AW) and time domain (AT) results of the
         NLSE propagation. Also provides the length (z), frequnecy (f), and time
-        (t) arrays. 
+        (t) arrays.
 
         ``'amplitude'`` - Native units for the NLSE, AT and AW are sqrt(W).
         Does NOT consider the rep-rate.
 
         ``'intensity'`` - Absolute value of amplitude squared. These units make
         some sense for AT, since they are J/sec, so integrating over the pulse
-        works as expected. Units for AW are J*Hz, so be careful when 
+        works as expected. Units for AW are J*Hz, so be careful when
         integrating. Does NOT consider rep-rate.
 
         ``'mW/bin'`` - AW and AT are in mW per bin, so naive summing provides
-        average power (in mW). Rep-rate taken into account. 
+        average power (in mW). Rep-rate taken into account.
 
         ``'mW/THz'`` - returns AW in units of mW/THz and AT in mW/ps. Rep-rate
         taken into account.
@@ -253,7 +253,7 @@ class PulseData:
         taken into account.
 
         ``'dBm/nm'`` - returns AW in units of dBm/nm and AT in dBm/ps. Rep-rate
-        taken into account. 
+        taken into account.
 
         In the above, dBm is 10*log10(mW).
 
@@ -500,8 +500,8 @@ class PulseData:
         if wavelength:
             ax0.set_xlabel('Wavelength (nm)')
             ax2.set_xlabel('Wavelength (nm)')
-            junkz, f, t, IW, IT = self.get_results_wavelength(data_type=units,
-                                                              rep_rate=rep_rate)
+            q, f, t, IW, IT = self.get_results_wavelength(data_type=units,
+                                                          rep_rate=rep_rate)
 
         else:
             ax0.set_xlabel('Frequency (THz)')
@@ -570,9 +570,11 @@ class PulseData:
                 roots = find_roots(x, y - np.max(y) + offset)
                 width = np.max(roots) - np.min(roots)
                 center = (np.max(roots) + np.min(roots)) * 0.5
+
             except:
                 width = np.max(x) - np.min(x)
                 center = (np.max(x) + np.min(x)) * 0.5
+
             return width, center
 
         if not hasattr(flim, "__len__"):
@@ -608,24 +610,29 @@ class PulseData:
             this determines the number of trials to be run.
 
         random_seed : int
-            this is the seed for the random noise generation. Default is None, which does not set a seed for the random
-            number generator, which means that the numbers will be completely randomized.
-            Setting the seed to a number (i.e., random_seed=0) will still generate random numbers for each trial,
-            but the results from calculate_coherence will be completely repeatable.
+            this is the seed for the random noise generation. Default is None,
+            which does not set a seed for the random number generator, which
+            means that the numbers will be completely randomized.
+            Setting the seed to a number (i.e., random_seed=0) will still
+            generate random numbers for each trial, but the results from
+            calculate_coherence will be completely repeatable.
 
         noise_type : str
-            this specifies the method for including random noise onto the pulse.
-            see :func:`pynlo.light.PulseBase.Pulse.add_noise` for the different methods.
+            this specifies the method for including random noise onto the
+            pulse. See :func:`pynlo.light.PulseBase.Pulse.add_noise` for the
+            different methods.
 
         Returns
         -------
         g12W : 2D numpy array
-            This 2D array gives the g12 parameter as a function of propagation distance and the frequency.
-            g12 gives a measure of the coherence of the pulse by comparing several different trials.
+            This 2D array gives the g12 parameter as a function of propagation
+            distance and the frequency. g12 gives a measure of the coherence of
+            the pulse by comparing several different trials.
 
         results : list of results for each trial
-            This is a list, where each item of the list contains (z_positions, AW, AT, pulse_out), the results
-            obtained from :func:`pynlo.interactions.FourWaveMixing.SSFM.propagate`.
+            This is a list, where each item of the list contains (z_positions,
+            AW, AT, pulse_out), the results obtained from
+            :func:`pynlo.interactions.FourWaveMixing.SSFM.propagate`.
         """
 
         results = []
