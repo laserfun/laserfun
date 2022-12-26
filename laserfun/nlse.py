@@ -13,6 +13,7 @@ from scipy.fftpack import fft, ifft, fftshift
 c_mks = 299792458.0
 c_nmps = c_mks * 1e9/1e12
 
+
 def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
          raman=False, shock=True, integrator='lsoda', print_status=True):
     """Propagate an laser pulse through a fiber according to the NLSE.
@@ -230,51 +231,51 @@ class PulseData:
         """Get the frequency domain (AW) and time domain (AT) results of the
         NLSE propagation. Also provides the length (z), frequnecy (f), and time
         (t) arrays. 
-        
+
         ``'amplitude'`` - Native units for the NLSE, AT and AW are sqrt(W).
         Does NOT consider the rep-rate.
-        
+
         ``'intensity'`` - Absolute value of amplitude squared. These units make
         some sense for AT, since they are J/sec, so integrating over the pulse
         works as expected. Units for AW are J*Hz, so be careful when 
         integrating. Does NOT consider rep-rate.
-        
+
         ``'mW/bin'`` - AW and AT are in mW per bin, so naive summing provides
         average power (in mW). Rep-rate taken into account. 
-        
-        ``'mW/THz'`` - returns AT in units of mW/THz and AT in mW/ps. Rep-rate
+
+        ``'mW/THz'`` - returns AW in units of mW/THz and AT in mW/ps. Rep-rate
         taken into account.
-        
-        ``'dBm/THz'`` - returns AT in units of mW/THz and AT in dBm/ps.
+
+        ``'dBm/THz'`` - returns AW in units of mW/THz and AT in dBm/ps.
         Rep-rate taken into account.
-        
-        ``'mW/nm'`` - returns AT in units of mW/nm and AT in mW/ps. Rep-rate
+
+        ``'mW/nm'`` - returns AW in units of mW/nm and AT in mW/ps. Rep-rate
         taken into account.
-        
+
         ``'dBm/nm'`` - returns AW in units of dBm/nm and AT in dBm/ps. Rep-rate
         taken into account. 
-        
+
         In the above, dBm is 10*log10(mW).
-        
+
         Note that, for the "per nm" situations, AW is still
         returned on a grid of even *frequencies*, so the uneven wavelength
         spacing should be taken into account when integrating. Use
         ``get_results_wavelength`` to re-interpolate to an evenly spaced
         wavelength grid.
-        
+
         In order to get per-pulse numbers for all methods, simple set the rep-
         rate to 1.
-        
+
 
         Parameters
         ----------
         data_type : 'string'
-            Determines the units for the returned AW and AT arrays. 
-        
+            Determines the units for the returned AW and AT arrays.
+
         rep_rate : float
-            The repetition rate of the pulses for calculation of average power 
+            The repetition rate of the pulses for calculation of average power
             units. Does not affect the "amplitude" or "intensity" calculations,
-            but scales all other calculations. 
+            but scales all other calculations.
 
         Returns
         -------
@@ -289,55 +290,55 @@ class PulseData:
         AT : 2D numpy array, with dimensions nsaves x n
             The complex amplitude of the time domain field at every step.
         """
-        
+
         if data_type == 'amplitude':
             AW, AT = self.AW, self.AT
-            
+
         elif data_type == 'intensity':
             AW = np.abs(self.AW)**2
             AT = np.abs(self.AT)**2
-            
+
         elif data_type == 'dB':
             AW = dB(self.AW)
             AT = dB(self.AT)
-            
+
         elif (data_type == 'mW/bin' or data_type == 'mW/THz' or
-             data_type == 'dBm/THz' or data_type == 'mW/nm' or
-             data_type == 'dBm/nm'):
+              data_type == 'dBm/THz' or data_type == 'mW/nm' or
+              data_type == 'dBm/nm'):
 
             z = self.z
             f = self.pulse_in.f_THz
             df = (f[1]-f[0]) * 1e12  # df in Hz
-            
+
             # per bin units:
             J_Hz = np.abs(self.AW)**2
             J_per_bin = J_Hz / df  # go from J*Hz/bin (native units) to J/bin
             # multiply by rep rate to get W/bin, and then mW/bin:
-            mW_per_bin = J_per_bin * rep_rate * 1e3  
-            
+            mW_per_bin = J_per_bin * rep_rate * 1e3
+
             # per THz units:
             mW_per_THz = mW_per_bin / (df * 1e-12)
             dBm_per_THz = 10 * np.log10(mW_per_THz)
-                
+
             # per wavelength units
             wl_nm = c_nmps / f
-            wl_m = wl_nm * 1e-9 
+            wl_m = wl_nm * 1e-9
             nm_per_bin = wl_m**2 / c_mks * df * 1e9  # Jacobian from THz to nm
             NM_PER_BIN, Z = np.meshgrid(nm_per_bin, z)
             mW_per_nm = mW_per_bin / NM_PER_BIN    # convert to mW/nm
             dBm_per_nm = 10 * np.log10(mW_per_nm)  # convert to dBm/nm
-            
+
             # AT conversion
             t = self.pulse_in.t_ps
             dt = (t[1] - t[0]) * 1e-12
             # convert from J/sec to J by mutiplying by dt
             AT_J_per_bin = np.abs(self.AT)**2 * dt
             # convert J/bin to mW/bin by multiplying by rep rate * 1e3
-            AT_mW_per_bin =  AT_J_per_bin * rep_rate * 1e3
+            AT_mW_per_bin = AT_J_per_bin * rep_rate * 1e3
             AT_mW_per_ps = AT_mW_per_bin / (dt * 1e12)
             AT_dBm_per_ps = 10*np.log10(AT_mW_per_ps)
 
-            if   data_type == 'mW/bin':
+            if data_type == 'mW/bin':
                 AW = mW_per_bin
                 AT = AT_mW_per_bin
             elif data_type == 'mW/THz':
@@ -354,12 +355,11 @@ class PulseData:
                 AT = AT_dBm_per_ps
             else:
                 raise ValueError('Units not recognized.')
-        
+
         else:
             raise ValueError('data_type not recognized.')
 
         return self.z, self.f_THz, self.t_ps, AW, AT
-
 
     def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
                                data_type='intensity'):
@@ -386,8 +386,8 @@ class PulseData:
             Determines the units for the AW and AT arrays. See the
             documentation for the ``get_results`` function for more
             information. Note that ``data_type='amplitude'`` is supported but
-            not recommended because interpolation on the rapidly varying grid 
-            of complex values can lead to inconsistent results. 
+            not recommended because interpolation on the rapidly varying grid
+            of complex values can lead to inconsistent results.
 
         Returns
         -------
@@ -421,21 +421,22 @@ class PulseData:
         # fast interpolation to wavelength grid, so that we can plot using
         # imshow for fast viewing. This requires Scipy > 1.6.0.
         AW_WLS = scipy.ndimage.interpolation.map_coordinates(
-                    AW, ((NEW_Z-np.min(z))/(z[1]-z[0]),
-                         (NEW_F-np.min(f))/(f[1]-f[0])),
-                    order=1, mode='nearest')
+            AW, ((NEW_Z-np.min(z))/(z[1]-z[0]),
+                 (NEW_F-np.min(f))/(f[1]-f[0])),
+            order=1, mode='nearest')
 
         return z, new_wls, t, AW_WLS, AT
 
-    def plot(self, flim=30, tlim=50, margin=0.2, wavelength=False, show=True):
+    def plot(self, flim=30, tlim=50, margin=0.2, wavelength=False, show=True,
+             units='intensity', rep_rate=1e8):
         """Plot the results in both the time and frequency domain.
 
         parameters
         ----------
         flim : float or array of length 2
             This sets the xlimits of the frequency domain plot. If this is a
-            single number, it defines the dB level at which the plot will be set
-            (with a margin). If an array of two values, this manually sets
+            single number, it defines the dB level at which the plot will be
+            set (with a margin). If an array of two values, this manually sets
             the xlims.
         tlim : float or array of length 2
             Same as flim, but for the time domain.
@@ -446,6 +447,14 @@ class PulseData:
             (THz) or wavelength (nm).
         show : boolean
             determines if plt.show() will be called to show the plot
+        units : string
+            Units for the frequency-domain plots. For example, dBm/THz mW/THz.
+            See the documentation for the ``data_type`` keyword argument for
+            the ``get_results`` method for more information.
+        rep_rate : float
+             The repetition rate of the pule train in Hz. This is used to
+             calculate the average powers when using units other than
+             "intensity".
 
         Returns
         -------
@@ -455,6 +464,7 @@ class PulseData:
             The axes objects, so that modifications can be made.
             For example: axs[0, 1].set_xlim(0, 1000)
         """
+
         fig = plt.figure(figsize=(8, 8))
         ax0 = plt.subplot2grid((3, 2), (0, 0), rowspan=1)
         ax1 = plt.subplot2grid((3, 2), (0, 1), rowspan=1)
@@ -463,46 +473,88 @@ class PulseData:
 
         z = self.z * 1e3  # convert to mm
 
+        if units == 'amplitude':
+            raise valueError('Cannot plot amplitude.',
+                             'Use intensity or other units.')
+        elif units == 'intensity':
+            funits = 'J * Hz'
+            tunits = 'J/sec'
+        elif units == 'mW/bin':
+            funits = 'mW/bin'
+            tunits = 'mW/bin'
+        elif units == 'mW/THz':
+            funits = 'mW/THz'
+            tunits = 'mW/sec'
+        elif units == 'dBm/THz':
+            funits = 'dBm/THz'
+            tunits = 'dBm/sec'
+        elif units == 'mW/nm':
+            funits = 'mW/nm'
+            tunits = 'mW/sec'
+        elif units == 'dBm/nm':
+            funits = 'dBm/nm'
+            tunits = 'dBm/sec'
+        else:
+            raise ValueError('Units not recognized.')
+
         if wavelength:
             ax0.set_xlabel('Wavelength (nm)')
             ax2.set_xlabel('Wavelength (nm)')
-            junkz, f, t, IW, AT = self.get_results_wavelength()
-            IW_dB = 10*np.log10(IW)
-            IT_dB = dB(AT)
+            junkz, f, t, IW, IT = self.get_results_wavelength(data_type=units,
+                                                              rep_rate=rep_rate)
 
         else:
             ax0.set_xlabel('Frequency (THz)')
             ax2.set_xlabel('Frequency (THz)')
-            f = self.f_THz
-            t = self.t_ps
-            IW_dB = dB(self.AW)
-            IT_dB = dB(self.AT)
+            junkz, f, t, IW, IT = self.get_results(data_type=units,
+                                                   rep_rate=rep_rate)
 
-        ax0.plot(f, IW_dB[0], color='b', label='Initial')
-        ax1.plot(t, IT_dB[0], color='b', label='Initial')
+        ax0.plot(f, IW[0], color='b', label='Initial')
+        ax1.plot(t, IT[0], color='b', label='Initial')
 
-        ax0.plot(f, IW_dB[-1], color='r', label='Final')
-        ax1.plot(t, IT_dB[-1], color='r', label='Final')
+        ax0.plot(f, IW[-1], color='r', label='Final')
+        ax1.plot(t, IT[-1], color='r', label='Final')
 
         ax1.legend(loc='upper left', fontsize=9)
 
         ax1.set_xlabel('Time (ps)')
 
-        ax0.set_ylabel('Intensity (dB)')
-        ax0.set_ylim(np.max(IW_dB[0]) - 100,
-                     np.max(IW_dB[0]) + 10)
-        ax1.set_ylim(np.max(IT_dB[-1]) - 100,
-                     np.max(IT_dB[-1]) + 10)
+        ax0.set_ylabel('Intensity (%s)' % funits)
+        ax1.set_ylabel('Intensity (%s)' % tunits)
+
+        # when plotting in dB units, the plots look best if we set cmin to the
+        # max value minus about 40 to 80 dB:
+        if 'dB' in units:
+            chif = np.max(IW)
+            clof = np.max(IW) - 50
+            chit = np.max(IT)
+            clot = np.max(IT) - 80
+            ylof = clof - 10
+            yhif = chif + 10
+            ylot = clot - 10
+            yhit = chit + 10
+
+            ax0.set_ylim(ylof, yhif)
+            ax1.set_ylim(ylot, yhit)
+
+        else:
+            chif = np.max(IW)
+            clof = np.min(IW)
+            chit = np.max(IT)
+            clot = np.min(IT)
 
         ax2.set_ylabel('Propagation distance (mm)')
 
         extf = (np.min(f), np.max(f), np.min(z), np.max(z))
         extt = (np.min(t), np.max(t), np.min(z), np.max(z))
 
-        ax2.imshow(IW_dB, extent=extf, vmin=np.max(IW_dB) - 40.0,
-                   vmax=np.max(IW_dB), aspect='auto', origin='lower')
-        ax3.imshow(IT_dB, extent=extt, vmin=np.max(IT_dB) - 80.0,
-                   vmax=np.max(IT_dB), aspect='auto', origin='lower')
+        # TODO: figure out how to make the clims reasonable. I guess full-scale
+        # for the linear units and max -40 or 80 for the other methods?
+
+        ax2.imshow(IW, extent=extf, clim=(clof, chif), aspect='auto',
+                   origin='lower')
+        ax3.imshow(IT, extent=extt, clim=(clot, chit), aspect='auto',
+                   origin='lower')
 
         ax3.set_xlabel('Time (ps)')
 
@@ -524,11 +576,11 @@ class PulseData:
             return width, center
 
         if not hasattr(flim, "__len__"):
-            w, c = find_width_and_center(f, IW_dB[-1], flim)
+            w, c = find_width_and_center(f, IW[-1], flim)
             flim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
 
         if not hasattr(tlim, "__len__"):
-            w, c = find_width_and_center(t, IT_dB[-1], tlim)
+            w, c = find_width_and_center(t, IT[-1], tlim)
             tlim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
 
         ax2.set_xlim(flim[0], flim[1])
@@ -539,7 +591,6 @@ class PulseData:
 
         axs = np.array([[ax0, ax1], [ax2, ax3]])
         return fig, axs
-
 
     def calc_coherence(self, pulse_in, fiber, num_trials=5, random_seed=None,
                        noise_type='one_photon_freq', **nlse_kwargs):
@@ -582,14 +633,15 @@ class PulseData:
             pulse = pulse_in.create_cloned_pulse()
             pulse.add_noise(noise_type=noise_type)
 
-            y, AW, AT, pulse_out = self.propagate(pulse_in=pulse, fiber=fiber, n_steps=n_steps)
+            y, AW, AT, pulse_out = self.propagate(
+                pulse_in=pulse, fiber=fiber, n_steps=n_steps)
 
             results.append((y, AW, AT, pulse_in, pulse_out))
 
-
         for n1, (y, E1, AT, pulsein, pulseout) in enumerate(results):
             for n2, (y, E2, AT, pulsein, pulseout) in enumerate(results):
-                if n1 == n2: continue # don't compare the same trial
+                if n1 == n2:
+                    continue  # don't compare the same trial
 
                 g12 = np.conj(E1)*E2/np.sqrt(np.abs(E1)**2 * np.abs(E2)**2)
                 if 'g12_stack' not in locals():
@@ -597,13 +649,10 @@ class PulseData:
                 else:
                     g12_stack = np.dstack((g12, g12_stack))
 
-
         # print g12_stack.shape, g12_stack.transpose().shape
         g12W = np.abs(np.mean(g12_stack, axis=2))
 
         return g12W, results
-
-
 
 
 def dB(num):
