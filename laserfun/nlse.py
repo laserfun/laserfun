@@ -592,7 +592,8 @@ class PulseData:
         axs = np.array([[ax0, ax1], [ax2, ax3]])
         return fig, axs
 
-    def calc_coherence(self, pulse_in, fiber, num_trials=5, random_seed=None,
+    def calc_coherence(self, pulse_in, fiber, num_trials=5, nsteps=100,
+                       random_seed=None,
                        noise_type='one_photon_freq', **nlse_kwargs):
         """
         This function runs several nlse simulations (given by num_trials), each
