@@ -362,7 +362,7 @@ class PulseData:
         return self.z, self.f_THz, self.t_ps, AW, AT
 
     def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
-                               data_type='intensity'):
+                               data_type='intensity', rep_rate=1):
         """Get results on a wavelength grid.
 
         Re-interpolates the AW array from evenly-spaced frequencies to
@@ -388,6 +388,10 @@ class PulseData:
             information. Note that ``data_type='amplitude'`` is supported but
             not recommended because interpolation on the rapidly varying grid
             of complex values can lead to inconsistent results.
+        rep_rate : float
+            The repetition rate of the pulses for calculation of average power
+            units. Does not affect the "amplitude" or "intensity" calculations,
+            but scales all other calculations.
 
         Returns
         -------
@@ -402,7 +406,8 @@ class PulseData:
         AT : 2D numpy array, with dimensions nsaves x n
             The complex amplitude of the time domain field at every step.
         """
-        z, f, t, AW, AT = self.get_results(data_type=data_type)
+        z, f, t, AW, AT = self.get_results(data_type=data_type, 
+                                           rep_rate=rep_rate)
 
         c_nmps = constants.value('speed of light in vacuum')*1e9/1e12
 
@@ -587,6 +592,9 @@ class PulseData:
 
         ax2.set_xlim(flim[0], flim[1])
         ax3.set_xlim(tlim[0], tlim[1])
+        
+        for ax in (ax0, ax1):
+            ax.grid(alpha=0.1, color='k')
 
         if show:
             plt.show()
