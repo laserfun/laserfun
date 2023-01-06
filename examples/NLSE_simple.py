@@ -11,4 +11,4 @@ f = lf.Fiber(length=0.010, center_wl_nm=1550, dispersion=(-0.12, 0, 5e-6),
 results = lf.NLSE(p, f, print_status=False)
 
 if __name__ == '__main__':  # make plots if we're not running tests
-    results.plot(units='mW/bin')
+    results.plot(units='dBm/nm')
