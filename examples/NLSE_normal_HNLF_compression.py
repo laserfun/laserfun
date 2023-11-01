@@ -51,18 +51,17 @@ level = 0.4      # level relative to maximum to evaluate pulse duration
 
 # ----- END OF PARAMETERS -----
 
-ps_nm_km = -pulseWL**2 / (2 * np.pi * 2.9979246e5)  # conversion for D2
-ps_nm2_km = pulseWL**2 / (2 * np.pi * 2.9979246e5)  # conversion for D3
+ps_nm_km = -pulseWL**2 / (2 * np.pi * 2.9979246e5)     # conversion for D2
+ps2_nm2 = pulseWL**4 / (4 * np.pi**2 * 2.9979246e5**2) # conversion for D3
+ps2_nm = pulseWL**3 / (2 * np.pi**2 * 2.9979246e5**2)
 
 # fiber1
 beta2 = disp1 * ps_nm_km    # (ps^2/km)
-beta3 = slope1 * ps_nm2_km  # (ps^3/km)
-beta4 = 0.00                # (ps^4/km)
+beta3 = slope1 * ps2_nm2 + disp1 * ps2_nm # (ps^3/km)
 
 # fiber 2
 beta22 = disp2 * ps_nm_km    # (ps^2/km)
-beta32 = slope2 * ps_nm2_km  # (ps^3/km)
-beta42 = 0.00                # (ps^4/km)
+beta32 = slope2 * ps2_nm2 + disp2 * ps2_nm # (ps^3/km)
 
 # create the pulse
 pulse_in = lf.Pulse(pulse_type='sech', fwhm_ps=FWHM, center_wavelength_nm=pulseWL,
@@ -71,7 +70,7 @@ pulse_in = lf.Pulse(pulse_type='sech', fwhm_ps=FWHM, center_wavelength_nm=pulseW
 
 # create the fiber
 fiber1 = lf.Fiber(length1, center_wl_nm=pulseWL, dispersion_format='GVD',
-                  dispersion=(beta2*1e-3, beta3*1e-3, beta4*1e-3),
+                  dispersion=(beta2*1e-3, beta3*1e-3),
                   gamma_W_m=gamma1 * 1e-3, loss_dB_per_m=alpha1*100)
 
 print('Propagation in fiber1...')
@@ -85,7 +84,7 @@ pulse1.aw = pulse1.aw * np.sqrt(fraction)
 
 # create the fiber!
 fiber2 = lf.Fiber(length2, center_wl_nm=pulseWL, dispersion_format='GVD',
-                  dispersion=(beta22*1e-3, beta32*1e-3, beta42*1e-3),
+                  dispersion=(beta22*1e-3, beta32*1e-3),
                   gamma_W_m=gamma2 * 1e-3, loss_dB_per_m=alpha2*100)
 
 print('Propagation in fiber2...')
