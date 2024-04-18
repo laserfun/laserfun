@@ -78,22 +78,20 @@ class Pulse:
         self.npts = npts
         self.center_wavelength_nm = center_wavelength_nm
         self.time_window_ps = time_window_ps
-
-        T0_ps = fwhm_ps/1.76
-
+            
         if pulse_type == 'sech':
             # from https://www.rp-photonics.com/sech2_shaped_pulses.html
-            self.at = np.sqrt(power)/np.cosh(self.t_ps/(T0_ps))
+            self.at = np.sqrt(power)/np.cosh(self.t_ps/(fwhm_ps/1.76))
 
         elif pulse_type == 'gaussian':
             # from https://www.rp-photonics.com/gaussian_pulses.html
             self.at = (np.sqrt(power) *
-                       np.exp(-2.77*0.5*self.t_ps**2/(T0_ps**2)))
+                        np.exp(-2.77*0.5*self.t_ps**2/((fwhm_ps)**2)))
 
         elif pulse_type == 'sinc':
             T0_ps = fwhm_ps/3.7909885   # previously: T0_ps = FWHM_ps/3.7909885
             # numpy.sinc is sin(pi*x)/(pi*x), so we divide by pi
-            self.at = np.sqrt(power) * np.sinc(self.t_ps/(T0_ps*np.pi))
+            self.at = np.sqrt(power) * np.sinc(self.t_ps/((fwhm_ps/2.783)*np.pi))
 
         else:
             raise ValueError('Pulse type not recognized.')
@@ -234,6 +232,14 @@ class Pulse:
         so units of energy per time bin when the absolute value is squared.
         """
         return IFFT_t(self._aw.copy())
+
+    @property
+    def it(self):
+        """Amplitude of the time-domain intensity.
+
+        Units are ``watts``.
+        """
+        return np.abs(self.at)**2
 
     @at.setter
     def at(self, at_new):
