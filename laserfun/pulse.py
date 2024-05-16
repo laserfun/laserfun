@@ -476,7 +476,7 @@ class Pulse:
         return newpulse
     
     def plot_spectrogram(self,gate_type='xfrog', gate_function_width_ps=0.020,
-                         time_steps=500, wavelength_or_frequency='frequency'):
+                         time_steps=500, wavelength_or_frequency='frequency',ylabels_of_interest=[]):
         """
         
         
@@ -496,31 +496,7 @@ class Pulse:
 
         """
         
-        # # call spectrogram
-        
-        # # plot
-        
-        # AT = self.at
-        # t_ps = self.t_ps
-        
-        # # Set up the figure and axes
-        # fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2]},sharex=True)
-        # DELAYS, FREQS, extent, spectrogram = self.spectrogram(gate_function_width_ps=0.050)
-
-        # # Plot initial and final time-domain pulses
-        # # ax0.plot(t_ps, np.abs(AT[0]), label='Initial Pulse')
-        # ax0.plot(t_ps, np.abs(AT) , label='Pulse')
-        # ax0.set_xlabel('Time (ps)')
-        # ax0.set_ylabel('Amplitude (a.u.)')
-        # ax0.legend()
-        
-        
-        # plt.imshow(spectrogram, aspect='auto', extent=extent)
-        # plt.xlabel('Time (ps)')
-        # plt.ylabel('Frequency (THz)')
-        # plt.tight_layout
-        
-         # Call spectrogram
+        # Call spectrogram
         DELAYS, FREQS_OR_WLS, extent, spectrogram = self.spectrogram(
             gate_type=gate_type, gate_function_width_ps=gate_function_width_ps, 
             time_steps=time_steps, wavelength_or_frequency=wavelength_or_frequency)
@@ -529,7 +505,7 @@ class Pulse:
         t_ps = self.t_ps
         
         # Set up the figure and axes
-        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2]}, sharex=True)
+        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8, 8), gridspec_kw={'height_ratios': [1, 2]}, sharex=True)
         
         # Plot initial and final time-domain pulses
         ax0.plot(t_ps, np.abs(AT), label='Pulse')
@@ -542,15 +518,40 @@ class Pulse:
             
         if wavelength_or_frequency == 'frequency':
             ax1.set_ylabel('Frequency (THz)')
+            
+                    
+            # Add white dashed lines at the specified wavelengths of interest
+            for wl in ylabels_of_interest:
+                ax1.axhline(y=wl, color='white', linestyle='--', linewidth=1)
+                #60nm is just a manual shift of the text.
+                ax1.text(x=extent[1] - 0.6, y=wl+10, s=f'{wl} THz', color='white', verticalalignment='center')
+                
         elif wavelength_or_frequency == 'wavelength':
             ax1.set_ylabel('Wavelength (nm)')
+                    
+            # Add white dashed lines at the specified wavelengths of interest
+            for wl in ylabels_of_interest:
+                ax1.axhline(y=wl, color='white', linestyle='--', linewidth=1)
+                #60nm is just a manual shift of the text.
+                ax1.text(x=extent[1] - 0.5, y=wl+60, s=f'{wl} nm', color='white', verticalalignment='center')
+
         else:
             raise ValueError('wavelength_or_frequency must be either "wavelength" or "frequency"')
     
+
+    
         ax1.set_xlabel('Time (ps)')
+        
+        
+        
+        ax1.xaxis.set_tick_params(labelbottom=True) 
+        ax0.xaxis.set_tick_params(labelbottom=True)
+        ax0.grid(True,which='both')
+
         
         plt.tight_layout()
         plt.show()
+        return fig, (ax0, ax1)
 
 
     
