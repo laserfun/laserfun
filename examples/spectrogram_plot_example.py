@@ -17,17 +17,17 @@ pulse = results.pulse_out
 if __name__ == '__main__':  # make plots if we're not running tests
     
     # Frequency plot
-    # results.plot(units='dBm/nm')
+    results.plot(units='dBm/nm')
     fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='frequency',ylabels_of_interest = [100, 200,300])
     
     # Wavelength plot
-    # results.plot(units='dBm/nm',wavelength=True)
-    # fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='wavelength',ylabels_of_interest = [600,1200])
+    results.plot(units='dBm/nm',wavelength=True)
+    fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='wavelength',ylabels_of_interest = [600,1200])
 
     # # Connect the click event handler
     from matplotlib.widgets import Button
 
-    # Event handler for click events
+    #### Event handler for click events
     def on_click(event):
         if event.inaxes == ax0:
             x = event.xdata
