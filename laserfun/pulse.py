@@ -496,33 +496,66 @@ class Pulse:
 
         """
         
-        # call spectrogram
+        # # call spectrogram
         
-        # plot
+        # # plot
+        
+        # AT = self.at
+        # t_ps = self.t_ps
+        
+        # # Set up the figure and axes
+        # fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2]},sharex=True)
+        # DELAYS, FREQS, extent, spectrogram = self.spectrogram(gate_function_width_ps=0.050)
+
+        # # Plot initial and final time-domain pulses
+        # # ax0.plot(t_ps, np.abs(AT[0]), label='Initial Pulse')
+        # ax0.plot(t_ps, np.abs(AT) , label='Pulse')
+        # ax0.set_xlabel('Time (ps)')
+        # ax0.set_ylabel('Amplitude (a.u.)')
+        # ax0.legend()
+        
+        
+        # plt.imshow(spectrogram, aspect='auto', extent=extent)
+        # plt.xlabel('Time (ps)')
+        # plt.ylabel('Frequency (THz)')
+        # plt.tight_layout
+        
+         # Call spectrogram
+        DELAYS, FREQS_OR_WLS, extent, spectrogram = self.spectrogram(
+            gate_type=gate_type, gate_function_width_ps=gate_function_width_ps, 
+            time_steps=time_steps, wavelength_or_frequency=wavelength_or_frequency)
         
         AT = self.at
         t_ps = self.t_ps
         
         # Set up the figure and axes
-        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2]},sharex=True)
-        DELAYS, FREQS, extent, spectrogram = self.spectrogram(gate_function_width_ps=0.050)
-
+        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2]}, sharex=True)
+        
         # Plot initial and final time-domain pulses
-        # ax0.plot(t_ps, np.abs(AT[0]), label='Initial Pulse')
-        ax0.plot(t_ps, np.abs(AT) , label='Pulse')
+        ax0.plot(t_ps, np.abs(AT), label='Pulse')
         ax0.set_xlabel('Time (ps)')
-        ax0.set_ylabel('Intensity (a.u.)')
+        ax0.set_ylabel('Amplitude (a.u.)')
         ax0.legend()
         
+        # Plot the spectrogram
+        im = ax1.imshow(np.abs(spectrogram), aspect='auto', extent=extent, origin='lower', cmap='viridis')
+            
+        if wavelength_or_frequency == 'frequency':
+            ax1.set_ylabel('Frequency (THz)')
+        elif wavelength_or_frequency == 'wavelength':
+            ax1.set_ylabel('Wavelength (nm)')
+        else:
+            raise ValueError('wavelength_or_frequency must be either "wavelength" or "frequency"')
+    
+        ax1.set_xlabel('Time (ps)')
         
-        plt.imshow(spectrogram, aspect='auto', extent=extent)
-        plt.xlabel('Time (ps)')
-        plt.ylabel('Frequency (THz)')
-        plt.tight_layout
+        plt.tight_layout()
+        plt.show()
+
 
     
     def spectrogram(self, gate_type='xfrog', gate_function_width_ps=0.020,
-                    time_steps=500):
+                    time_steps=500, wavelength_or_frequency = 'frequency'):
         """This calculates the spectrogram of the pulse, which is a 2D plot of
         the time versus the frequnecy. It can be used to visualize where
         different spectral components are located in time.
@@ -561,6 +594,8 @@ class Pulse:
             the number of delay time steps to use. More steps makes a higher 
             resolution spectrogram, but takes longer to process and plot.
             Default is 500
+        wavelength_or_frequency: str
+            Default is 'frequency'
         
         Returns
         -------
@@ -631,11 +666,42 @@ class Pulse:
         freqs = np.fft.fftfreq(np.shape(E)[0], t[1]-t[0])
         
         DELAYS, FREQS = np.meshgrid(delay, freqs)
-                
-        # calculate the extent to make it easy to plot:
-        extent = (np.min(DELAYS), np.max(DELAYS), np.min(FREQS) + self.centerfrequency_THz, np.max(FREQS) + self.centerfrequency_THz)
+
+       
+        if wavelength_or_frequency == 'frequency':
+            # calculate the extent to make it easy to plot:
+            extent = (np.min(DELAYS), np.max(DELAYS), np.min(FREQS) + self.centerfrequency_THz, np.max(FREQS) + self.centerfrequency_THz)
+            return DELAYS, FREQS, extent, np.abs(spectrogram)
         
-        return DELAYS, FREQS, extent, np.abs(spectrogram)
+        elif wavelength_or_frequency == 'wavelength':
+            # Convert frequencies to wavelengths
+            
+            FREQS = fft.fftshift(FREQS) # center on zero
+            frequencies_THz = FREQS[:,1] + self.centerfrequency_THz 
+            # this is just a frequency vector for the interpolation because innterpolation requires increasing values (https://numpy.org/doc/stable/reference/generated/numpy.interp.html)
+            #the interpoloation is therefore done on a "new frequency grid" that corresponds to the equidistant wavelength grid.
+            
+            # Define the new wavelength grid
+            wl_min = self.center_wavelength_nm / 4 #some arbitrary boundaries covering > octave
+            wl_max = self.center_wavelength_nm * 4 
+            
+            wavelength_grid = np.linspace(wl_min, wl_max, np.shape(FREQS)[0])
+            new_frequencies_grid = c_nmps / wavelength_grid #this is just for the interpolation to have an increasing grid.
+            
+            # Interpolate spectrogram data onto the new frequency grid that corresponds to the desired wavelength grid
+            spectrogram_interpolated = np.zeros((len(wavelength_grid), np.shape(spectrogram)[1]))
+            
+            for i in range(np.shape(spectrogram)[1]):
+                spectrogram_interpolated[:, i] = np.interp(new_frequencies_grid, frequencies_THz, np.abs(spectrogram[:, i]))
+
+            
+            WAVELENGTHS, DELAYS = np.meshgrid(wavelength_grid, delay)
+            extent = (np.min(DELAYS), np.max(DELAYS), np.min(wavelength_grid), np.max(wavelength_grid))
+            return DELAYS, WAVELENGTHS, extent, spectrogram_interpolated
+        
+        else:
+            raise ValueError('wavelength_or_frequency must be either "wavelength" or "frequency"')
+
     
 def FFT_t(A, ax=0):
     """Do a FFT with fft-shifting."""
