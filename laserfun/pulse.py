@@ -2,7 +2,8 @@
 
 import numpy as np
 import scipy.fftpack as fft
-
+import scipy
+import matplotlib.pyplot as plt
 
 # speed of light in m/s and nm/ps
 c_mks = 299792458.0
@@ -474,7 +475,240 @@ class Pulse:
         newpulse.aw = np.abs(newpulse.aw)
         return newpulse
     
+    def plot_spectrogram(self,gate_type='xfrog', gate_function_width_ps=0.020,
+                         time_steps=500, wavelength_or_frequency='frequency',ylabels_of_interest=[]):
+        """
+        
+        
+        Parameters
+        ----------
+        gate_type : TYPE, optional
+            DESCRIPTION. The default is 'xfrog'.
+        gate_function_width_ps : TYPE, optional
+            DESCRIPTION. The default is 0.020.
+        time_steps : TYPE, optional
+            DESCRIPTION. The default is 500.
+        wavelength_or_frequency : TYPE, string
+            plots the spectrogram in frequency or wavelength domain. The default is 'frequency'
+        ylabels_of_interest
+            Wavelengtsh or frequencies of interest that are plotted as horizontal lines overlaying the spectrogramm.Defaults to []
+        Returns
+        -------
+        None.
 
+        """
+        
+        # Call spectrogram
+        DELAYS, FREQS_OR_WLS, extent, spectrogram = self.spectrogram(
+            gate_type=gate_type, gate_function_width_ps=gate_function_width_ps, 
+            time_steps=time_steps, wavelength_or_frequency=wavelength_or_frequency)
+        
+        AT = self.at
+        t_ps = self.t_ps
+        
+        # Set up the figure and axes
+        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8, 8), gridspec_kw={'height_ratios': [1, 2]}, sharex=True)
+        
+        # Plot initial and final time-domain pulses
+        ax0.plot(t_ps, np.abs(AT), label='Pulse')
+        ax0.set_xlabel('Time (ps)')
+        ax0.set_ylabel('Amplitude (a.u.)')
+        ax0.legend()
+        
+        # Plot the spectrogram
+        im = ax1.imshow(np.abs(spectrogram), aspect='auto', extent=extent, origin='lower', cmap='viridis')
+            
+        if wavelength_or_frequency == 'frequency':
+            ax1.set_ylabel('Frequency (THz)')
+            
+                    
+            # Add white dashed lines at the specified wavelengths of interest
+            for wl in ylabels_of_interest:
+                ax1.axhline(y=wl, color='white', linestyle='--', linewidth=1)
+                #60nm is just a manual shift of the text.
+                ax1.text(x=extent[1] - 0.6, y=wl+10, s=f'{wl} THz', color='white', verticalalignment='center')
+                
+        elif wavelength_or_frequency == 'wavelength':
+            ax1.set_ylabel('Wavelength (nm)')
+                    
+            # Add white dashed lines at the specified wavelengths of interest
+            for wl in ylabels_of_interest:
+                ax1.axhline(y=wl, color='white', linestyle='--', linewidth=1)
+                #60nm is just a manual shift of the text.
+                ax1.text(x=extent[1] - 0.5, y=wl+60, s=f'{wl} nm', color='white', verticalalignment='center')
+
+        else:
+            raise ValueError('wavelength_or_frequency must be either "wavelength" or "frequency"')
+    
+
+    
+        ax1.set_xlabel('Time (ps)')
+        
+        
+        
+        ax1.xaxis.set_tick_params(labelbottom=True) 
+        ax0.xaxis.set_tick_params(labelbottom=True)
+        ax0.grid(True,which='both')
+
+        
+        plt.tight_layout()
+        plt.show()
+        return fig, (ax0, ax1)
+
+
+    
+    def spectrogram(self, gate_type='xfrog', gate_function_width_ps=0.020,
+                    time_steps=500, wavelength_or_frequency = 'frequency'):
+        """This calculates the spectrogram of the pulse, which is a 2D plot of
+        the time versus the frequnecy. It can be used to visualize where
+        different spectral components are located in time.
+        
+        The pulse can either be compared with a gaussian reference pulse
+        (XFROG) or to itself (FROG). Here, FROG refers to the "frequency
+        resolved optical gating" experiment. The temporal width of the pulse 
+        for the XFROG is set by the "gate_function_width_ps" parameter.
+        
+        See Dudley Fig. 10, on p1153 for a description
+        of the XFROG spectrogram in the context of supercontinuum generaiton. 
+        (http://dx.doi.org/10.1103/RevModPhys.78.1135)
+        
+        Alternatively, the gate_type can be set to 'frog', which simulates a
+        SHG-FROG measurement, where the pulse is probed with a copy of itself,
+        in an autocorrelation fashion. Interpreting this FROG spectrogram is 
+        less intuitive, so this is mainly useful for comparison with 
+        experimental  FROG spectra (which are often easier to acquire than 
+        XFROG measurements.)
+        
+        A nice discussion of various FROG "species" is available here: 
+        http://frog.gatech.edu/tutorial.html
+        
+        Parameters
+        ----------
+        gate_type : string
+            Determines the type of gate function. Can be either 'xfrog' or 
+            'frog'. Should likely be set to 'xfrog' unless comparing with 
+            experiments. Default is 'xfrog'.
+        gate_function_width : float
+            the width of the gate function in seconds. Only applies when 
+            gate_type='xfrog'. A shorter duration provides better temporal 
+            resolution, but worse spectral resolution, so this is a trade-off.
+            Typically, 0.01 to 0.1 ps works well.
+        time_steps : int
+            the number of delay time steps to use. More steps makes a higher 
+            resolution spectrogram, but takes longer to process and plot.
+            Default is 500
+        wavelength_or_frequency: str
+            Default is 'frequency'
+        
+        Returns
+        -------
+        DELAYS : 2D numpy meshgrid 
+            the columns have increasing delay (in ps)
+        FREQS : 2D numpy meshgrid
+            the rows have increasing frequency (in THz)
+        spectrogram : 2D numpy array
+            Following the convention of Dudley, the frequency runs along the
+            y-axis (axis 0) and the time runs along the x-axis (axis 1)
+        
+        Example
+        -------
+        The spectrogram can be visualized using something like this: ::
+            
+            import matplotlib.pyplot as plt
+            plt.figure()
+            DELAYS, FREQS, extent, spectrogram = pulse.spectrogram()
+            plt.imshow(spectrogram, aspect='auto', extent=extent)
+            plt.xlabel('Time (ps)')
+            plt.ylabel('Frequency (THz)')
+            plt.tight_layout
+        
+            plt.show()
+        
+        output:
+        
+        .. image:: https://cloud.githubusercontent.com/assets/1107796/13677657/25075ea4-e6a8-11e5-98b4-7813fa9a6425.png
+           :width: 500px
+           :alt: example_result
+        """
+        
+        def gauss(x, A=1, mu=0, sigma=1):  # gaussian function
+            return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+            
+        t = self.t_ps  # working in ps
+        
+        delay = np.linspace(np.min(t), np.max(t), time_steps)
+        D, T  = np.meshgrid(delay, t)
+        D, AT = np.meshgrid(delay, self.at)
+        
+        phase = np.unwrap(np.angle(AT))
+        amp   = np.abs(AT)
+        
+                
+        if gate_type == 'xfrog':
+            gate_function = gauss(T, mu=D, sigma=gate_function_width_ps)
+        elif gate_type=='frog':
+            dstep = float(delay[1]-delay[0])
+            tstep = float(    t[1]-    t[0])
+            
+            # calculate the coordinates of the new array
+            dcoord = D*0
+            tcoord = (T-D-np.min(T))/tstep
+                        
+            gate_function_real = scipy.ndimage.interpolation.map_coordinates(np.real(AT), (tcoord, dcoord))
+            gate_function_imag = scipy.ndimage.interpolation.map_coordinates(np.imag(AT), (tcoord, dcoord))
+            gate_function = gate_function_real + 1j*gate_function_imag
+        
+        else:
+            raise ValueError('Type \""%s\"" not recognized. Type must be \"xfrog\" or \"frog\".'%gate_type)
+            
+        # make a 2D array of E(time, delay)
+        E = amp * gate_function * np.exp(1j*(phase))
+        
+        spectrogram = np.fft.ifft(E, axis=0)
+        spectrogram = np.fft.fftshift(spectrogram, axes=0)
+        
+        freqs = np.fft.fftfreq(np.shape(E)[0], t[1]-t[0])
+        freqs = np.fft.fftshift(freqs)
+        freqs = freqs + self.centerfrequency_THz
+        
+        DELAYS, FREQS = np.meshgrid(delay, freqs)
+
+       
+        if wavelength_or_frequency == 'frequency':
+            # calculate the extent to make it easy to plot:
+            extent = (np.min(DELAYS), np.max(DELAYS), np.min(FREQS), np.max(FREQS))
+            return DELAYS, FREQS, extent, np.abs(spectrogram)
+        
+        elif wavelength_or_frequency == 'wavelength':
+            # Convert frequencies to wavelengths
+            
+            
+            frequencies_THz = FREQS[:,1]
+            # this is just a frequency vector for the interpolation because innterpolation requires increasing values (https://numpy.org/doc/stable/reference/generated/numpy.interp.html)
+            #the interpoloation is therefore done on a "new frequency grid" that corresponds to the equidistant wavelength grid.
+            
+            # Define the new wavelength grid
+            wl_min = self.center_wavelength_nm / 2.5 #some arbitrary boundaries covering > octave
+            wl_max = self.center_wavelength_nm * 2.5 
+            
+            wavelength_grid = np.linspace(wl_min, wl_max, np.shape(FREQS)[0])
+            new_frequencies_grid = c_nmps / wavelength_grid #this is just for the interpolation to have an increasing grid.
+            
+            # Interpolate spectrogram data onto the new frequency grid that corresponds to the desired wavelength grid
+            spectrogram_interpolated = np.zeros((len(wavelength_grid), np.shape(spectrogram)[1]))
+            
+            for i in range(np.shape(spectrogram)[1]):
+                spectrogram_interpolated[:, i] = np.interp(new_frequencies_grid, frequencies_THz, np.abs(spectrogram[:, i]))
+
+            
+            WAVELENGTHS, DELAYS = np.meshgrid(wavelength_grid, delay)
+            extent = (np.min(DELAYS), np.max(DELAYS), np.min(wavelength_grid), np.max(wavelength_grid))
+            return DELAYS, WAVELENGTHS, extent, spectrogram_interpolated
+        
+        else:
+            raise ValueError('wavelength_or_frequency must be either "wavelength" or "frequency"')
+
+    
 def FFT_t(A, ax=0):
     """Do a FFT with fft-shifting."""
     A = A.astype('complex128')
