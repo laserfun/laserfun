@@ -17,12 +17,14 @@ pulse = results.pulse_out
 if __name__ == '__main__':  # make plots if we're not running tests
     
     # Frequency plot
-    results.plot(units='dBm/nm')
-    fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='frequency',ylabels_of_interest = [100, 200,300])
+    # results.plot(units='dBm/nm')
+    # fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='frequency',ylabels_of_interest = [100, 200,300])
     
     # Wavelength plot
     results.plot(units='dBm/nm',wavelength=True)
     fig, (ax0,ax1) = pulse.plot_spectrogram(wavelength_or_frequency='wavelength',ylabels_of_interest = [600,1200])
+
+    ######## make a button that would allow clicking on the peaks at the top subplot and creating vertical lines with their ps values
 
     # # Connect the click event handler
     from matplotlib.widgets import Button

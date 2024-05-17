@@ -490,6 +490,8 @@ class Pulse:
             DESCRIPTION. The default is 500.
         wavelength_or_frequency : TYPE, string
             plots the spectrogram in frequency or wavelength domain. The default is 'frequency'
+        ylabels_of_interest
+            Wavelengtsh or frequencies of interest that are plotted as horizontal lines overlaying the spectrogramm.Defaults to []
         Returns
         -------
         None.
@@ -662,29 +664,32 @@ class Pulse:
         # make a 2D array of E(time, delay)
         E = amp * gate_function * np.exp(1j*(phase))
         
-        spectrogram = np.fft.fft(E, axis=0)
+        spectrogram = np.fft.ifft(E, axis=0)
         spectrogram = np.fft.fftshift(spectrogram, axes=0)
+        
         freqs = np.fft.fftfreq(np.shape(E)[0], t[1]-t[0])
+        freqs = np.fft.fftshift(freqs)
+        freqs = freqs + self.centerfrequency_THz
         
         DELAYS, FREQS = np.meshgrid(delay, freqs)
 
        
         if wavelength_or_frequency == 'frequency':
             # calculate the extent to make it easy to plot:
-            extent = (np.min(DELAYS), np.max(DELAYS), np.min(FREQS) + self.centerfrequency_THz, np.max(FREQS) + self.centerfrequency_THz)
+            extent = (np.min(DELAYS), np.max(DELAYS), np.min(FREQS), np.max(FREQS))
             return DELAYS, FREQS, extent, np.abs(spectrogram)
         
         elif wavelength_or_frequency == 'wavelength':
             # Convert frequencies to wavelengths
             
-            FREQS = fft.fftshift(FREQS) # center on zero
-            frequencies_THz = FREQS[:,1] + self.centerfrequency_THz 
+            
+            frequencies_THz = FREQS[:,1]
             # this is just a frequency vector for the interpolation because innterpolation requires increasing values (https://numpy.org/doc/stable/reference/generated/numpy.interp.html)
             #the interpoloation is therefore done on a "new frequency grid" that corresponds to the equidistant wavelength grid.
             
             # Define the new wavelength grid
-            wl_min = self.center_wavelength_nm / 4 #some arbitrary boundaries covering > octave
-            wl_max = self.center_wavelength_nm * 4 
+            wl_min = self.center_wavelength_nm / 2.5 #some arbitrary boundaries covering > octave
+            wl_max = self.center_wavelength_nm * 2.5 
             
             wavelength_grid = np.linspace(wl_min, wl_max, np.shape(FREQS)[0])
             new_frequencies_grid = c_nmps / wavelength_grid #this is just for the interpolation to have an increasing grid.
