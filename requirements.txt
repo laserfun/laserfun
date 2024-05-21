@@ -1,3 +1,0 @@
-numpy>=1.15.0
-scipy>=1.6.0
-sphinx_rtd_theme

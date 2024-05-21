@@ -3,8 +3,7 @@ from setuptools import setup
 import os
 install_requires=[
       "numpy>=1.15.0",
-      "scipy>=1.6.0",
-      "sphinx-rtd-theme"
+      "scipy>=1.6.0"
       ]
 # on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 #
