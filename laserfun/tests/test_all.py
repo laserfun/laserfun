@@ -10,20 +10,18 @@ def test_pulse():
     """Test that the max of pulses match previously calculated values."""
 
     parameters = dict(center_wavelength_nm=1550, time_window_ps=20,
-                      fwhm_ps=0.5, GDD=0, TOD=0, npts=2**13,
+                      fwhm_ps=0.1, GDD=0, TOD=0, npts=2**13,
                       frep_MHz=100, power_is_avg=False, epp=50e-12)
 
+    # test if the pulse FWHM is correctly implemented:
     pulse = lf.Pulse(pulse_type='gaussian', **parameters)
-    aw = np.abs(pulse.aw)**2
-    assert np.abs(np.max(aw) - 0.075)/0.075 < 0.01
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=1e-3)
 
     pulse = lf.Pulse(pulse_type='sech', **parameters)
-    aw = np.abs(pulse.aw)**2
-    assert np.abs(np.max(aw) - 0.175)/0.175 < 0.01
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=2e-3)
 
     pulse = lf.Pulse(pulse_type='sinc', **parameters)
-    aw = np.abs(pulse.aw)**2
-    assert np.abs(np.max(aw) - 0.0608)/0.0608 < 0.01
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=1e-3)
 
     # try to make a pulse with power_is_avg
     pulse = lf.Pulse(pulse_type='sech', power_is_avg=True, time_window_ps=20)
@@ -31,7 +29,6 @@ def test_pulse():
     assert np.abs(pulse.time_window_ps - 20) < 1e-5
 
     # test if the add-noise functions work without crashing
-    # TODO: test if the pulse shape is generally preserved.
     pulse.add_noise(noise_type='sqrt_N_freq')
     pulse.add_noise(noise_type='one_photon_freq')
 
@@ -167,17 +164,16 @@ def test_nlse_psd():
 
 
 if __name__ == '__main__':
-    print('Some tests disabled!!')
-    # print('test_pulse...')
-    # test_pulse()
-    # print('test_pulse_psd...')
-    # test_pulse_psd()
-    # print('test_nlse_loss...')
-    # test_nlse_loss()
-    # print('test_nlse_spectrum...')
-    # test_nlse_spectrum()
-    # print('test_fiber...')
-    # test_fiber()
+    print('test_pulse...')
+    test_pulse()
+    print('test_pulse_psd...')
+    test_pulse_psd()
+    print('test_nlse_loss...')
+    test_nlse_loss()
+    print('test_nlse_spectrum...')
+    test_nlse_spectrum()
+    print('test_fiber...')
+    test_fiber()
     print('test_nlse_psd')
     test_nlse_psd()
     print('Testing examples...')

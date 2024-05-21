@@ -7,3 +7,5 @@
 *.js
 *.html
 *doc/build/*
+laserfun/.DS_Store
+.DS_Store
