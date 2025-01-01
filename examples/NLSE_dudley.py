@@ -16,7 +16,7 @@ f = lf.Fiber(length=0.15, center_wl_nm=835, dispersion=betas,
 
 r = lf.NLSE(p, f, nsaves=200, raman=True)
 z, new_wls, t, AW, AT = r.get_results_wavelength(wmin=400, wmax=1350, wn=400,
-                                                 datatype='dB')
+                                                 data_type='dB')
 
 fig, axs = plt.subplots(1, 2, figsize=(8, 5), tight_layout='True')
 
