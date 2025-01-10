@@ -36,13 +36,19 @@ neff_int = scipy.interpolate.interp1d(data['widths'], data['neff'], axis=0)
 aeff = aeff_int(width)
 neff = neff_int(width)
 
+# deal with possible nan values in neff and aeff
+wls_n = wls[np.logical_not(np.isnan(neff))]
+neff = neff[np.logical_not(np.isnan(neff))]
+
+wls_a = wls[np.logical_not(np.isnan(aeff))]
+aeff = aeff[np.logical_not(np.isnan(aeff))]
+
 
 def disp_function(z=0):  # provide effective index to the NLSE
-    return (wls, neff)
-
+    return (wls_n, neff)
 
 def gamma_function(z=0):  # provide the nonlinearity at the pump to the NLSE
-    aeff_interp = scipy.interpolate.interp1d(wls, aeff)
+    aeff_interp = scipy.interpolate.interp1d(wls_a, aeff)
     return 2*np.pi*n2/(pulseWL*1e-9*aeff_interp(pulseWL)*1e-12)
 
 
