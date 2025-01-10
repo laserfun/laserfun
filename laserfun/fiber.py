@@ -77,6 +77,9 @@ class Fiber:
             raise ValueError('D format is not currently supported')
 
         elif dispersion_format == 'n':
+            if np.any(np.isnan(dispersion)):
+                raise ValueError('Dispersion cannot contain NaN values.')
+                
             self.x = dispersion[0]
             self.y = dispersion[1]
 
@@ -158,7 +161,10 @@ class Fiber:
             gamma = self.gamma_function(z)
         else:
             gamma = self.gamma
-
+        
+        if not np.isfinite(gamma):
+            raise ValueError(f'Invalid gamma: {gamma}')
+        
         return gamma
 
     def get_alpha(self, z=0):
@@ -179,6 +185,9 @@ class Fiber:
         else:
             alpha = self.alpha
 
+        if not np.isfinite(alpha):
+            raise ValueError(f'Invalid alpha: {alpha}')
+            
         return alpha
 
     def get_B(self, pulse, z=0):
@@ -248,7 +257,11 @@ class Fiber:
             # interpolate (using a spline) the betas from the refractive index
             # self.x is the wavelength in nm
             # self.y is the refractive index (unitless)
-
+            if not np.all(np.isfinite(self.x)):
+                raise ValueError(f'Invalid wavelength array: {self.x}')
+            if not np.all(np.isfinite(self.y)):
+                raise ValueError(f'Invalid n array: {self.y}')
+            
             supplied_W_THz = 2 * np.pi * 1e-12 * 3e8 / (self.x*1e-9)
             supplied_betas = self.y * 2 * np.pi / (self.x * 1e-9)
 
@@ -268,4 +281,8 @@ class Fiber:
             slope = np.gradient(B)/np.gradient(pulse.w_THz)
             B = B - slope[center_index] * (pulse.v_THz) - B[center_index]
 
+        if not np.all(np.isfinite(B)):
+            raise ValueError(f'Beta array invalid. \
+                             Check dispersion parameters.')
+            
         return B
