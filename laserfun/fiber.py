@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline as IUSpline
 from scipy.special import factorial
+from scipy.integrate import cumulative_trapezoid
 
 
 c_mks = 299792458.0
@@ -74,7 +75,11 @@ class Fiber:
             self.betas = np.copy(np.array(dispersion))
 
         elif dispersion_format == 'D':
-            raise ValueError('D format is not currently supported')
+            if np.any(np.isnan(dispersion)):
+                raise ValueError('Dispersion cannot contain NaN values.')
+            
+            self.x = dispersion[0]
+            self.y = dispersion[1]
 
         elif dispersion_format == 'n':
             if np.any(np.isnan(dispersion)):
@@ -200,9 +205,9 @@ class Fiber:
 
         Three different methods are used,
 
-        If fiberspecs["dispersion_format"] == "D", then the DTabulationToBetas
-        function is used to fit the datapoints in terms of the Beta2, Beta3,
-        etc. coefficients expanded around the pulse central frequency.
+        If fiberspecs["dispersion_format"] == "D", then the refractive index is
+        computed from the given values by integration, after which the approach
+        for the "n" format is used.
 
         If fiberspecs["dispersion_format"] == "GVD", then the betas are
         calculated as a Taylor expansion using the Beta2, Beta3, etc.
@@ -242,7 +247,33 @@ class Fiber:
         B = np.zeros((pulse.npts,))  # initialize array
 
         if self.fiberspecs["dispersion_format"] == "D":
-            raise ValueError('D format is not currently supported')
+            # interpolate (using a spline) the betas from the refractive index computed by
+            # integrating the given dispersion values
+            # self.x is the wavelength in nm
+            # self.y is the dispersion in ps/nm/km
+            if not np.all(np.isfinite(self.x)):
+                raise ValueError(f'Invalid wavelength array: {self.x}')
+            if not np.all(np.isfinite(self.y)):
+                raise ValueError(f'Invalid D array: {self.y}')
+            
+            wavelengths = self.x * 1e-9
+            supplied_W_THz = 2 * np.pi * 1e-12 * 3e8 / wavelengths
+            
+            refractive_index = cumulative_trapezoid(
+                cumulative_trapezoid(
+                    -3e8 * self.y * 1e-12 / 1e-9 / 1e3 / wavelengths, 
+                    wavelengths, 
+                    initial=0
+                ),
+                wavelengths,
+                initial=0,
+            )
+
+            supplied_betas = refractive_index * 2 * np.pi / wavelengths
+
+            # InterpolatedUnivariateSpline wants increasing x, so flip arrays
+            interpolator = IUSpline(supplied_W_THz[::-1], supplied_betas[::-1])
+            B = interpolator(pulse.w_THz)
 
         elif self.fiberspecs["dispersion_format"] == "GVD":
             # calculate beta[n]/n! * (w-w0)^n
@@ -269,12 +300,13 @@ class Fiber:
             interpolator = IUSpline(supplied_W_THz[::-1], supplied_betas[::-1])
             B = interpolator(pulse.w_THz)
 
-        # in the case of "GVD" or "n" it's possible (likely) that the betas
+        # in the case of "GVD" or "n" or "D" it's possible (likely) that the betas
         # will not be zero and have zero slope at the pulse central frequency.
         # For the NLSE, we need to move into a frame propagating at the
         # same group velocity, so we need to set the value and slope of beta
         # at the pulse wavelength to zero:
         if (self.fiberspecs["dispersion_format"] == "GVD" or
+           self.fiberspecs["dispersion_format"] == "D" or
            self.fiberspecs["dispersion_format"] == "n"):
 
             center_index = np.argmin(np.abs(pulse.v_THz))
