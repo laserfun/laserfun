@@ -1,5 +1,8 @@
 """Functions related to propagation of pulses according to the NLSE."""
 
+from pulse import Pulse
+from fiber import Fiber
+
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy import linspace, pi, exp, sin
@@ -11,11 +14,22 @@ from scipy.fftpack import fft, ifft, fftshift
 
 # speed of light in m/s and nm/ps
 c_mks = 299792458.0
-c_nmps = c_mks * 1e9/1e12
+c_nmps = c_mks * 1e9 / 1e12
 
 
-def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
-         raman=False, shock=True, integrator='lsoda', print_status=True):
+def NLSE(
+    pulse: Pulse,
+    fiber: Fiber,
+    nsaves: int = 200,
+    atol: float = 1e-4,
+    rtol: float = 1e-4,
+    reload_fiber: bool = False,
+    raman: bool = False,
+    custom_raman: tuple[float, float, float] = (0, 0, 0),
+    shock: bool = True,
+    integrator: str = "lsoda",
+    print_status: bool = True,
+):
     """Propagate an laser pulse through a fiber according to the NLSE.
 
     This function propagates an optical input field (often a laser pulse)
@@ -54,6 +68,10 @@ def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         as a function of length.
     raman : boolean
         Determines if the Raman effect will be included. Default is False.
+    custom_raman : tuple[float, float, float]
+        when there is a need of custom raman values in form of [fR, tau_1, tau_2]
+        fR -> Raman coefficient.
+        tau_1 and tau_2 are in picoseconds.
     shock : boolean
         Determines if the self-steepening (shock) term will be taken into
         account. This is especially important for situations where the
@@ -84,12 +102,12 @@ def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     """
     # get the pulse info from the pulse object:
     t = pulse.t_ps  # time array in picoseconds
-    at = pulse.at   # amplitude for those times in sqrt(W)
+    at = pulse.at  # amplitude for those times in sqrt(W)
     w0 = pulse.centerfrequency_THz * 2 * pi  # center freq (angular!)
 
-    n = t.size        # number of time/frequency points
+    n = t.size  # number of time/frequency points
     dt = t[1] - t[0]  # time step
-    v = 2 * pi * linspace(-0.5/dt, 0.5/dt, n)  # *angular* frequency grid
+    v = 2 * pi * linspace(-0.5 / dt, 0.5 / dt, n)  # *angular* frequency grid
 
     flength = fiber.length  # get length of fiber
 
@@ -98,15 +116,15 @@ def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         gamma = fiber.get_gamma(z)  # gamma should be in 1/(W m), not 1/(W km)
         b = fiber.get_B(pulse, z)
 
-        loss = np.log(10**(fiber.get_alpha(z)*0.1))  # convert from dB/m
+        loss = np.log(10 ** (fiber.get_alpha(z) * 0.1))  # convert from dB/m
 
-        lin_operator = 1j*b - loss*0.5  # linear operator
+        lin_operator = 1j * b - loss * 0.5  # linear operator
 
-        if w0 > 0 and shock:          # if w0>0 then include shock
-            gamma = gamma/w0
-            w = v + w0              # for shock w is true freq
+        if w0 > 0 and shock:  # if w0>0 then include shock
+            gamma = gamma / w0
+            w = v + w0  # for shock w is true freq
         else:
-            w = 1 + v*0             # set w to 1 when no shock
+            w = 1 + v * 0  # set w to 1 when no shock
 
         # some fft shifts to things line up later:
         lin_operator = fftshift(lin_operator)
@@ -116,17 +134,24 @@ def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
     lin_operator, w, gamma = load_fiber(fiber)  # load fiber info
 
     # Raman response:
-    if raman == 'dudley' or raman:
+    if raman == "dudley" or raman:
         fr = 0.18
         t1 = 0.0122
         t2 = 0.032
-        rt = (t1**2+t2**2)/t1/t2**2*exp(-t/t2)*sin(t/t1)
-        rt[t < 0] = 0                # heaviside step function
+        rt = (t1**2 + t2**2) / t1 / t2**2 * exp(-t / t2) * sin(t / t1)
+        rt[t < 0] = 0  # heaviside step function
+        rw = n * ifft(fftshift(rt))  # frequency domain Raman
+    elif raman and custom_raman != [0, 0, 0]:
+        fr = custom_raman[0]
+        t1 = custom_raman[1]
+        t2 = custom_raman[2]
+        rt = (t1**2 + t2**2) / t1 / t2**2 * exp(-t / t2) * sin(t / t1)
+        rt[t < 0] = 0  # heaviside step function
         rw = n * ifft(fftshift(rt))  # frequency domain Raman
     elif not raman:
         fr = 0
     else:
-        raise ValueError('Raman method not supported')
+        raise ValueError("Raman method not supported")
 
     # define function to return the RHS of Eq. (3.13):
     def rhs(z, aw):
@@ -135,46 +160,48 @@ def NLSE(pulse, fiber, nsaves=200, atol=1e-4, rtol=1e-4, reload_fiber=False,
         if reload_fiber:
             lin_operator, w, gamma = load_fiber(fiber, z)
 
-        at = fft(aw * exp(lin_operator*z))    # time domain field
-        it = np.abs(at)**2                    # time domain intensity
+        at = fft(aw * exp(lin_operator * z))  # time domain field
+        it = np.abs(at) ** 2  # time domain intensity
 
         if np.isclose(fr, 0):  # no Raman case
-            m = ifft(at*it)                    # response function
+            m = ifft(at * it)  # response function
         else:
-            rs = dt * fr * fft(ifft(it) * rw)     # Raman convolution
-            m = ifft(at*((1-fr)*it + rs))         # response function
+            rs = dt * fr * fft(ifft(it) * rw)  # Raman convolution
+            m = ifft(at * ((1 - fr) * it + rs))  # response function
 
-        r = 1j * gamma * w * m * exp(-lin_operator*z)  # full RHS of Eq. (3.13)
+        r = 1j * gamma * w * m * exp(-lin_operator * z)  # full RHS of Eq. (3.13)
         return r
 
-    z = linspace(0, flength, nsaves)    # select output z points
-    aw = ifft(at.astype('complex128'))  # ensure integrator knows it's complex
+    z = linspace(0, flength, nsaves)  # select output z points
+    aw = ifft(at.astype("complex128"))  # ensure integrator knows it's complex
 
     # set up the integrator:
     r = complex_ode(rhs).set_integrator(integrator, atol=atol, rtol=rtol)
     r.set_initial_value(aw, z[0])
 
     # intialize array for results:
-    AW = np.zeros((z.size, aw.size), dtype='complex128')
-    AW[0] = aw        # store initial pulse as first row
+    AW = np.zeros((z.size, aw.size), dtype="complex128")
+    AW[0] = aw  # store initial pulse as first row
 
     start_time = time.time()  # start the timer
 
     for count, zi in enumerate(z[1:]):
 
         if print_status:
-            print('% 6.1f%% - %.3e m - %.1f seconds' % ((zi/z[-1])*100,
-                  zi, time.time()-start_time))
+            print(
+                "% 6.1f%% - %.3e m - %.1f seconds"
+                % ((zi / z[-1]) * 100, zi, time.time() - start_time)
+            )
         if not r.successful():
-            raise Exception('Integrator failed! Check the input parameters.')
+            raise Exception("Integrator failed! Check the input parameters.")
 
-        AW[count+1] = r.integrate(zi)
+        AW[count + 1] = r.integrate(zi)
 
     # process the output:
     AT = np.zeros_like(AW)
     for i in range(len(z)):
-        AW[i] = AW[i] * exp(lin_operator.transpose()*z[i])  # change variables
-        AT[i, :] = fft(AW[i])            # time domain output
+        AW[i] = AW[i] * exp(lin_operator.transpose() * z[i])  # change variables
+        AT[i, :] = fft(AW[i])  # time domain output
         AW[i, :] = fftshift(AW[i])
 
         # Below is the original dudley scaling factor that I think gives units
@@ -227,7 +254,7 @@ class PulseData:
         self.f_THz = pulse_out.f_THz
         self.t_ps = pulse_out.t_ps
 
-    def get_results(self, data_type='amplitude', rep_rate=1):
+    def get_results(self, data_type="amplitude", rep_rate=1):
         """Get the frequency domain (AW) and time domain (AT) results of the
         NLSE propagation. Also provides the length (z), frequnecy (f), and time
         (t) arrays.
@@ -291,27 +318,31 @@ class PulseData:
             The complex amplitude of the time domain field at every step.
         """
 
-        if data_type == 'amplitude':
+        if data_type == "amplitude":
             AW, AT = self.AW, self.AT
 
-        elif data_type == 'intensity':
-            AW = np.abs(self.AW)**2
-            AT = np.abs(self.AT)**2
+        elif data_type == "intensity":
+            AW = np.abs(self.AW) ** 2
+            AT = np.abs(self.AT) ** 2
 
-        elif data_type == 'dB':
+        elif data_type == "dB":
             AW = dB(self.AW)
             AT = dB(self.AT)
 
-        elif (data_type == 'mW/bin' or data_type == 'mW/THz' or
-              data_type == 'dBm/THz' or data_type == 'mW/nm' or
-              data_type == 'dBm/nm'):
+        elif (
+            data_type == "mW/bin"
+            or data_type == "mW/THz"
+            or data_type == "dBm/THz"
+            or data_type == "mW/nm"
+            or data_type == "dBm/nm"
+        ):
 
             z = self.z
             f = self.pulse_in.f_THz
-            df = (f[1]-f[0]) * 1e12  # df in Hz
+            df = (f[1] - f[0]) * 1e12  # df in Hz
 
             # per bin units:
-            J_Hz = np.abs(self.AW)**2
+            J_Hz = np.abs(self.AW) ** 2
             J_per_bin = J_Hz / df  # go from J*Hz/bin (native units) to J/bin
             # multiply by rep rate to get W/bin, and then mW/bin:
             mW_per_bin = J_per_bin * rep_rate * 1e3
@@ -325,44 +356,45 @@ class PulseData:
             wl_m = wl_nm * 1e-9
             nm_per_bin = wl_m**2 / c_mks * df * 1e9  # Jacobian from THz to nm
             NM_PER_BIN, Z = np.meshgrid(nm_per_bin, z)
-            mW_per_nm = mW_per_bin / NM_PER_BIN    # convert to mW/nm
+            mW_per_nm = mW_per_bin / NM_PER_BIN  # convert to mW/nm
             dBm_per_nm = 10 * np.log10(mW_per_nm)  # convert to dBm/nm
 
             # AT conversion
             t = self.pulse_in.t_ps
             dt = (t[1] - t[0]) * 1e-12
             # convert from J/sec to J by mutiplying by dt
-            AT_J_per_bin = np.abs(self.AT)**2 * dt
+            AT_J_per_bin = np.abs(self.AT) ** 2 * dt
             # convert J/bin to mW/bin by multiplying by rep rate * 1e3
             AT_mW_per_bin = AT_J_per_bin * rep_rate * 1e3
             AT_mW_per_ps = AT_mW_per_bin / (dt * 1e12)
-            AT_dBm_per_ps = 10*np.log10(AT_mW_per_ps)
+            AT_dBm_per_ps = 10 * np.log10(AT_mW_per_ps)
 
-            if data_type == 'mW/bin':
+            if data_type == "mW/bin":
                 AW = mW_per_bin
                 AT = AT_mW_per_bin
-            elif data_type == 'mW/THz':
+            elif data_type == "mW/THz":
                 AW = mW_per_THz
                 AT = AT_mW_per_ps
-            elif data_type == 'dBm/THz':
+            elif data_type == "dBm/THz":
                 AW = dBm_per_THz
                 AT = AT_dBm_per_ps
-            elif data_type == 'mW/nm':
+            elif data_type == "mW/nm":
                 AW = mW_per_nm
                 AT = AT_mW_per_ps
-            elif data_type == 'dBm/nm':
+            elif data_type == "dBm/nm":
                 AW = dBm_per_nm
                 AT = AT_dBm_per_ps
             else:
-                raise ValueError('Units not recognized.')
+                raise ValueError("Units not recognized.")
 
         else:
-            raise ValueError('data_type not recognized.')
+            raise ValueError("data_type not recognized.")
 
         return self.z, self.f_THz, self.t_ps, AW, AT
 
-    def get_results_wavelength(self, wmin=None, wmax=None, wn=None,
-                               data_type='intensity', rep_rate=1):
+    def get_results_wavelength(
+        self, wmin=None, wmax=None, wn=None, data_type="intensity", rep_rate=1
+    ):
         """Get results on a wavelength grid.
 
         Re-interpolates the AW array from evenly-spaced frequencies to
@@ -406,34 +438,43 @@ class PulseData:
         AT : 2D numpy array, with dimensions nsaves x n
             The complex amplitude of the time domain field at every step.
         """
-        z, f, t, AW, AT = self.get_results(data_type=data_type, 
-                                           rep_rate=rep_rate)
+        z, f, t, AW, AT = self.get_results(data_type=data_type, rep_rate=rep_rate)
 
-        c_nmps = constants.value('speed of light in vacuum')*1e9/1e12
+        c_nmps = constants.value("speed of light in vacuum") * 1e9 / 1e12
 
         if wmin is None:
-            wmin = 0.25 * c_nmps/self.pulse_in.centerfrequency_THz
+            wmin = 0.25 * c_nmps / self.pulse_in.centerfrequency_THz
         if wmax is None:
-            wmax = 4.0 * c_nmps/self.pulse_in.centerfrequency_THz
+            wmax = 4.0 * c_nmps / self.pulse_in.centerfrequency_THz
         if wn is None:
             wn = AW.shape[1] * 2
 
         new_wls = np.linspace(wmin, wmax, wn)
 
         NEW_WLS, NEW_Z = np.meshgrid(new_wls, z)
-        NEW_F = c_nmps/NEW_WLS
+        NEW_F = c_nmps / NEW_WLS
 
         # fast interpolation to wavelength grid, so that we can plot using
         # imshow for fast viewing. This requires Scipy > 1.6.0.
         AW_WLS = scipy.ndimage.interpolation.map_coordinates(
-            AW, ((NEW_Z-np.min(z))/(z[1]-z[0]),
-                 (NEW_F-np.min(f))/(f[1]-f[0])),
-            order=1, mode='nearest')
+            AW,
+            ((NEW_Z - np.min(z)) / (z[1] - z[0]), (NEW_F - np.min(f)) / (f[1] - f[0])),
+            order=1,
+            mode="nearest",
+        )
 
         return z, new_wls, t, AW_WLS, AT
 
-    def plot(self, flim=30, tlim=50, margin=0.2, wavelength=False, show=True,
-             units='intensity', rep_rate=1e8):
+    def plot(
+        self,
+        flim=30,
+        tlim=50,
+        margin=0.2,
+        wavelength=False,
+        show=True,
+        units="intensity",
+        rep_rate=1e8,
+    ):
         """Plot the results in both the time and frequency domain.
 
         parameters
@@ -478,58 +519,57 @@ class PulseData:
 
         z = self.z * 1e3  # convert to mm
 
-        if units == 'amplitude':
-            raise ValueError('Cannot plot amplitude.',
-                             'Use intensity or other units.')
-        elif units == 'intensity':
-            funits = 'J * Hz'
-            tunits = 'J/sec'
-        elif units == 'mW/bin':
-            funits = 'mW/bin'
-            tunits = 'mW/bin'
-        elif units == 'mW/THz':
-            funits = 'mW/THz'
-            tunits = 'mW/sec'
-        elif units == 'dBm/THz':
-            funits = 'dBm/THz'
-            tunits = 'dBm/sec'
-        elif units == 'mW/nm':
-            funits = 'mW/nm'
-            tunits = 'mW/sec'
-        elif units == 'dBm/nm':
-            funits = 'dBm/nm'
-            tunits = 'dBm/sec'
+        if units == "amplitude":
+            raise ValueError("Cannot plot amplitude.", "Use intensity or other units.")
+        elif units == "intensity":
+            funits = "J * Hz"
+            tunits = "J/sec"
+        elif units == "mW/bin":
+            funits = "mW/bin"
+            tunits = "mW/bin"
+        elif units == "mW/THz":
+            funits = "mW/THz"
+            tunits = "mW/sec"
+        elif units == "dBm/THz":
+            funits = "dBm/THz"
+            tunits = "dBm/sec"
+        elif units == "mW/nm":
+            funits = "mW/nm"
+            tunits = "mW/sec"
+        elif units == "dBm/nm":
+            funits = "dBm/nm"
+            tunits = "dBm/sec"
         else:
-            raise ValueError('Units not recognized.')
+            raise ValueError("Units not recognized.")
 
         if wavelength:
-            ax0.set_xlabel('Wavelength (nm)')
-            ax2.set_xlabel('Wavelength (nm)')
-            q, f, t, IW, IT = self.get_results_wavelength(data_type=units,
-                                                          rep_rate=rep_rate)
+            ax0.set_xlabel("Wavelength (nm)")
+            ax2.set_xlabel("Wavelength (nm)")
+            q, f, t, IW, IT = self.get_results_wavelength(
+                data_type=units, rep_rate=rep_rate
+            )
 
         else:
-            ax0.set_xlabel('Frequency (THz)')
-            ax2.set_xlabel('Frequency (THz)')
-            junkz, f, t, IW, IT = self.get_results(data_type=units,
-                                                   rep_rate=rep_rate)
+            ax0.set_xlabel("Frequency (THz)")
+            ax2.set_xlabel("Frequency (THz)")
+            junkz, f, t, IW, IT = self.get_results(data_type=units, rep_rate=rep_rate)
 
-        ax0.plot(f, IW[0], color='b', label='Initial')
-        ax1.plot(t, IT[0], color='b', label='Initial')
+        ax0.plot(f, IW[0], color="b", label="Initial")
+        ax1.plot(t, IT[0], color="b", label="Initial")
 
-        ax0.plot(f, IW[-1], color='r', label='Final')
-        ax1.plot(t, IT[-1], color='r', label='Final')
+        ax0.plot(f, IW[-1], color="r", label="Final")
+        ax1.plot(t, IT[-1], color="r", label="Final")
 
-        ax1.legend(loc='upper left', fontsize=9)
+        ax1.legend(loc="upper left", fontsize=9)
 
-        ax1.set_xlabel('Time (ps)')
+        ax1.set_xlabel("Time (ps)")
 
-        ax0.set_ylabel('Intensity (%s)' % funits)
-        ax1.set_ylabel('Intensity (%s)' % tunits)
+        ax0.set_ylabel("Intensity (%s)" % funits)
+        ax1.set_ylabel("Intensity (%s)" % tunits)
 
         # when plotting in dB units, the plots look best if we set cmin to the
         # max value minus about 40 to 80 dB:
-        if 'dB' in units:
+        if "dB" in units:
             chif = np.max(IW)
             clof = np.max(IW) - 50
             chit = np.max(IT)
@@ -548,7 +588,7 @@ class PulseData:
             chit = np.max(IT)
             clot = np.min(IT)
 
-        ax2.set_ylabel('Propagation distance (mm)')
+        ax2.set_ylabel("Propagation distance (mm)")
 
         extf = (np.min(f), np.max(f), np.min(z), np.max(z))
         extt = (np.min(t), np.max(t), np.min(z), np.max(z))
@@ -556,12 +596,10 @@ class PulseData:
         # TODO: figure out how to make the clims reasonable. I guess full-scale
         # for the linear units and max -40 or 80 for the other methods?
 
-        ax2.imshow(IW, extent=extf, clim=(clof, chif), aspect='auto',
-                   origin='lower')
-        ax3.imshow(IT, extent=extt, clim=(clot, chit), aspect='auto',
-                   origin='lower')
+        ax2.imshow(IW, extent=extf, clim=(clof, chif), aspect="auto", origin="lower")
+        ax3.imshow(IT, extent=extt, clim=(clot, chit), aspect="auto", origin="lower")
 
-        ax3.set_xlabel('Time (ps)')
+        ax3.set_xlabel("Time (ps)")
 
         fig.tight_layout()
 
@@ -569,7 +607,7 @@ class PulseData:
         def find_width_and_center(x, y, offset=10):
             def find_roots(x, y):
                 s = np.abs(np.diff(np.sign(y))).astype(bool)
-                return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
+                return x[:-1][s] + np.diff(x)[s] / (np.abs(y[1:][s] / y[:-1][s]) + 1)
 
             try:
                 roots = find_roots(x, y - np.max(y) + offset)
@@ -584,17 +622,17 @@ class PulseData:
 
         if not hasattr(flim, "__len__"):
             w, c = find_width_and_center(f, IW[-1], flim)
-            flim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
+            flim = (c - 0.5 * w * (1 + margin), c + 0.5 * w * (1 + margin))
 
         if not hasattr(tlim, "__len__"):
             w, c = find_width_and_center(t, IT[-1], tlim)
-            tlim = (c - 0.5*w*(1 + margin), c + 0.5*w*(1 + margin))
+            tlim = (c - 0.5 * w * (1 + margin), c + 0.5 * w * (1 + margin))
 
         ax2.set_xlim(flim[0], flim[1])
         ax3.set_xlim(tlim[0], tlim[1])
-        
+
         for ax in (ax0, ax1):
-            ax.grid(alpha=0.1, color='k')
+            ax.grid(alpha=0.1, color="k")
 
         if show:
             plt.show()
@@ -602,9 +640,16 @@ class PulseData:
         axs = np.array([[ax0, ax1], [ax2, ax3]])
         return fig, axs
 
-    def calc_coherence(self, pulse_in, fiber, num_trials=5, n_steps=100,
-                       random_seed=None,
-                       noise_type='one_photon_freq', **nlse_kwargs):
+    def calc_coherence(
+        self,
+        pulse_in,
+        fiber,
+        num_trials=5,
+        n_steps=100,
+        random_seed=None,
+        noise_type="one_photon_freq",
+        **nlse_kwargs
+    ):
         """
         This function runs several nlse simulations (given by num_trials), each
         time adding random noise to the pulse. By comparing the electric fields
@@ -650,7 +695,8 @@ class PulseData:
             pulse.add_noise(noise_type=noise_type)
 
             y, AW, AT, pulse_out = self.propagate(
-                pulse_in=pulse, fiber=fiber, n_steps=n_steps)
+                pulse_in=pulse, fiber=fiber, n_steps=n_steps
+            )
 
             results.append((y, AW, AT, pulse_in, pulse_out))
 
@@ -659,8 +705,8 @@ class PulseData:
                 if n1 == n2:
                     continue  # don't compare the same trial
 
-                g12 = np.conj(E1)*E2/np.sqrt(np.abs(E1)**2 * np.abs(E2)**2)
-                if 'g12_stack' not in locals():
+                g12 = np.conj(E1) * E2 / np.sqrt(np.abs(E1) ** 2 * np.abs(E2) ** 2)
+                if "g12_stack" not in locals():
                     g12_stack = g12
                 else:
                     g12_stack = np.dstack((g12, g12_stack))
@@ -672,5 +718,5 @@ class PulseData:
 
 
 def dB(num):
-    with np.errstate(divide='ignore'):
-        return 10 * np.log10(np.abs(num)**2)
+    with np.errstate(divide="ignore"):
+        return 10 * np.log10(np.abs(num) ** 2)
