@@ -25,7 +25,7 @@ def NLSE(
     rtol: float = 1e-4,
     reload_fiber: bool = False,
     raman: bool = False,
-    custom_raman: tuple[float, float, float] = (0, 0, 0),
+    custom_raman: tuple[float, float, float] | str = (0, 0, 0),
     shock: bool = True,
     integrator: str = "lsoda",
     print_status: bool = True,
@@ -68,10 +68,13 @@ def NLSE(
         as a function of length.
     raman : boolean
         Determines if the Raman effect will be included. Default is False.
-    custom_raman : tuple[float, float, float]
-        when there is a need of custom raman values in form of [fR, tau_1, tau_2]
-        fR -> Raman coefficient.
-        tau_1 and tau_2 are in picoseconds.
+    custom_raman : tuple[float, float, float] | str
+        for tuple[float, float, float]:
+            when there is a need of custom raman values in form of [fR, tau_1, tau_2]
+            fR -> Raman coefficient.
+            tau_1 and tau_2 are in picoseconds.
+        for str:
+            Can use strings like "dudley" to populate custom_raman value as per Dudley.
     shock : boolean
         Determines if the self-steepening (shock) term will be taken into
         account. This is especially important for situations where the
@@ -134,22 +137,25 @@ def NLSE(
     lin_operator, w, gamma = load_fiber(fiber)  # load fiber info
 
     # Raman response:
-    if raman == "dudley" or raman:
-        fr = 0.18
-        t1 = 0.0122
-        t2 = 0.032
-        rt = (t1**2 + t2**2) / t1 / t2**2 * exp(-t / t2) * sin(t / t1)
-        rt[t < 0] = 0  # heaviside step function
-        rw = n * ifft(fftshift(rt))  # frequency domain Raman
-    elif raman and custom_raman != [0, 0, 0]:
-        fr = custom_raman[0]
-        t1 = custom_raman[1]
-        t2 = custom_raman[2]
+    if raman:
+        if custom_raman == "dudley":
+            fr = 0.18
+            t1 = 0.0122
+            t2 = 0.032
+        elif custom_raman != [0, 0, 0] and all(
+            isinstance(x, float) for x in custom_raman
+        ):
+            fr, t1, t2 = map(float, custom_raman)
+        else:
+            raise ValueError(
+                "Invalid custom_raman format. Use 'dudley' or a 3-float tuple."
+            )
         rt = (t1**2 + t2**2) / t1 / t2**2 * exp(-t / t2) * sin(t / t1)
         rt[t < 0] = 0  # heaviside step function
         rw = n * ifft(fftshift(rt))  # frequency domain Raman
     elif not raman:
         fr = 0
+        rw = 0
     else:
         raise ValueError("Raman method not supported")
 
@@ -254,7 +260,7 @@ class PulseData:
         self.f_THz = pulse_out.f_THz
         self.t_ps = pulse_out.t_ps
 
-    def get_results(self, data_type="amplitude", rep_rate=1):
+    def get_results(self, data_type="amplitude", rep_rate: float = 1):
         """Get the frequency domain (AW) and time domain (AT) results of the
         NLSE propagation. Also provides the length (z), frequnecy (f), and time
         (t) arrays.
@@ -393,7 +399,7 @@ class PulseData:
         return self.z, self.f_THz, self.t_ps, AW, AT
 
     def get_results_wavelength(
-        self, wmin=None, wmax=None, wn=None, data_type="intensity", rep_rate=1
+        self, wmin=None, wmax=None, wn=None, data_type="intensity", rep_rate: float = 1
     ):
         """Get results on a wavelength grid.
 
