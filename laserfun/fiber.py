@@ -7,14 +7,21 @@ from scipy.integrate import cumulative_trapezoid
 
 
 c_mks = 299792458.0
-c_nmps = c_mks * 1e9/1e12
+c_nmps = c_mks * 1e9 / 1e12
 
 
 class Fiber:
     """A class that contains the information about a fiber."""
 
-    def __init__(self, length=0.1, center_wl_nm=1550, dispersion_format='GVD',
-                 dispersion=[0], gamma_W_m=0, loss_dB_per_m=0):
+    def __init__(
+        self,
+        length=0.1,
+        center_wl_nm=1550,
+        dispersion_format="GVD",
+        dispersion=[0],
+        gamma_W_m: float = 0.0,
+        loss_dB_per_m=0,
+    ):
         """Generate a fiber object.
 
         Contains the dispersion, nonlinearity, gain, and loss data for a pulse
@@ -59,7 +66,7 @@ class Fiber:
             of light, and Aeff is the effective area of the mode at w0.
         loss_dB_per_m : float
             this is the loss expressed as dB per meter
-            Note that wavelenght-independent gain can be achieved by using a
+            Note that wavelength-independent gain can be achieved by using a
             negative loss.
         """
         self.length = length
@@ -69,34 +76,32 @@ class Fiber:
         self.gamma = gamma_W_m
         self.alpha = loss_dB_per_m
 
-        self.fiberspecs['dispersion_format'] = dispersion_format
+        self.fiberspecs["dispersion_format"] = dispersion_format
 
-        if dispersion_format == 'GVD':
+        if dispersion_format == "GVD":
             self.betas = np.copy(np.array(dispersion))
-
-        elif dispersion_format == 'D':
+        elif dispersion_format == "D":
             if np.any(np.isnan(dispersion)):
-                raise ValueError('Dispersion cannot contain NaN values.')
-            
+                raise ValueError("Dispersion cannot contain NaN values.")
+
             self.x = dispersion[0]
             self.y = dispersion[1]
 
-        elif dispersion_format == 'n':
+        elif dispersion_format == "n":
             if np.any(np.isnan(dispersion)):
-                raise ValueError('Dispersion cannot contain NaN values.')
-                
+                raise ValueError("Dispersion cannot contain NaN values.")
+
             self.x = dispersion[0]
             self.y = dispersion[1]
 
         else:
-            raise ValueError('Dispersion format not recognized.')
+            raise ValueError("Dispersion format not recognized.")
 
         self.dispersion_changes_with_z = False
         self.alpha_changes_with_z = False
         self.gamma_changes_with_z = False
 
-    def set_dispersion_function(self, dispersion_function,
-                                dispersion_format='GVD'):
+    def set_dispersion_function(self, dispersion_function, dispersion_format="GVD"):
         """Set dispersion to function that varies as a function of z.
 
         The function can either provide beta2, beta3, beta4, etc. coefficients,
@@ -166,10 +171,10 @@ class Fiber:
             gamma = self.gamma_function(z)
         else:
             gamma = self.gamma
-        
+
         if not np.isfinite(gamma):
-            raise ValueError(f'Invalid gamma: {gamma}')
-        
+            raise ValueError(f"Invalid gamma: {gamma}")
+
         return gamma
 
     def get_alpha(self, z=0):
@@ -191,8 +196,8 @@ class Fiber:
             alpha = self.alpha
 
         if not np.isfinite(alpha):
-            raise ValueError(f'Invalid alpha: {alpha}')
-            
+            raise ValueError(f"Invalid alpha: {alpha}")
+
         return alpha
 
     def get_B(self, pulse, z=0):
@@ -225,7 +230,7 @@ class Fiber:
             the pulse object must be supplied to define the frequency grid.
 
         z : float
-            the postion along the length of the fiber. The units of this must
+            the position along the length of the fiber. The units of this must
             match the units expected by the functions provided to
             set_dispersion_function() and set_gamma_function().
             Just use meters!
@@ -238,8 +243,10 @@ class Fiber:
         """
         # if the dispersion changes with z, load the dispersion at z:
         if self.dispersion_changes_with_z:
-            if (self.fiberspecs["dispersion_format"] == "D" or
-               self.fiberspecs["dispersion_format"] == "n"):
+            if (
+                self.fiberspecs["dispersion_format"] == "D"
+                or self.fiberspecs["dispersion_format"] == "n"
+            ):
                 self.x, self.y = self.dispersion_function(z)
             if self.fiberspecs["dispersion_format"] == "GVD":
                 self.betas = np.array(self.dispersion_function(z))
@@ -252,18 +259,18 @@ class Fiber:
             # self.x is the wavelength in nm
             # self.y is the dispersion in ps/nm/km
             if not np.all(np.isfinite(self.x)):
-                raise ValueError(f'Invalid wavelength array: {self.x}')
+                raise ValueError(f"Invalid wavelength array: {self.x}")
             if not np.all(np.isfinite(self.y)):
-                raise ValueError(f'Invalid D array: {self.y}')
-            
+                raise ValueError(f"Invalid D array: {self.y}")
+
             wavelengths = self.x * 1e-9
             supplied_W_THz = 2 * np.pi * 1e-12 * 3e8 / wavelengths
-            
+
             refractive_index = cumulative_trapezoid(
                 cumulative_trapezoid(
-                    -3e8 * self.y * 1e-12 / 1e-9 / 1e3 / wavelengths, 
-                    wavelengths, 
-                    initial=0
+                    -3e8 * self.y * 1e-12 / 1e-9 / 1e3 / wavelengths,
+                    wavelengths,
+                    initial=0,
                 ),
                 wavelengths,
                 initial=0,
@@ -281,19 +288,20 @@ class Fiber:
             betas = self.betas
             for i in range(len(betas)):
                 betas[i] = betas[i]
-                B = (B + betas[i] / factorial(i + 2) *
-                     (pulse.w_THz-fiber_omega0)**(i + 2))
+                B = B + betas[i] / factorial(i + 2) * (pulse.w_THz - fiber_omega0) ** (
+                    i + 2
+                )
 
         elif self.fiberspecs["dispersion_format"] == "n":
             # interpolate (using a spline) the betas from the refractive index
             # self.x is the wavelength in nm
             # self.y is the refractive index (unitless)
             if not np.all(np.isfinite(self.x)):
-                raise ValueError(f'Invalid wavelength array: {self.x}')
+                raise ValueError(f"Invalid wavelength array: {self.x}")
             if not np.all(np.isfinite(self.y)):
-                raise ValueError(f'Invalid n array: {self.y}')
-            
-            supplied_W_THz = 2 * np.pi * 1e-12 * 3e8 / (self.x*1e-9)
+                raise ValueError(f"Invalid n array: {self.y}")
+
+            supplied_W_THz = 2 * np.pi * 1e-12 * 3e8 / (self.x * 1e-9)
             supplied_betas = self.y * 2 * np.pi / (self.x * 1e-9)
 
             # InterpolatedUnivariateSpline wants increasing x, so flip arrays
@@ -305,16 +313,20 @@ class Fiber:
         # For the NLSE, we need to move into a frame propagating at the
         # same group velocity, so we need to set the value and slope of beta
         # at the pulse wavelength to zero:
-        if (self.fiberspecs["dispersion_format"] == "GVD" or
-           self.fiberspecs["dispersion_format"] == "D" or
-           self.fiberspecs["dispersion_format"] == "n"):
+        if (
+            self.fiberspecs["dispersion_format"] == "GVD"
+            or self.fiberspecs["dispersion_format"] == "D"
+            or self.fiberspecs["dispersion_format"] == "n"
+        ):
 
             center_index = np.argmin(np.abs(pulse.v_THz))
-            slope = np.gradient(B)/np.gradient(pulse.w_THz)
+            slope = np.gradient(B) / np.gradient(pulse.w_THz)
             B = B - slope[center_index] * (pulse.v_THz) - B[center_index]
 
         if not np.all(np.isfinite(B)):
-            raise ValueError(f'Beta array invalid. \
-                             Check dispersion parameters.')
-            
+            raise ValueError(
+                "Beta array invalid. \
+                             Check dispersion parameters."
+            )
+
         return B

@@ -473,8 +473,8 @@ class PulseData:
 
     def plot(
         self,
-        flim=30,
-        tlim=50,
+        flim: float | tuple[float, float] = 30,
+        tlim: float | tuple[float, float] = 50,
         margin=0.2,
         wavelength=False,
         show=True,
