@@ -5,17 +5,20 @@ import numpy as np
 import laserfun as lf
 import scipy.interpolate
 
-# waveguide parameters
-disp_file = 'Si3N4_oxideclad_thick-750nm_widths-0.4-3.9_wav-0.40-3.00um.npz'
-width = 2.4  # micron
-n2 = 2.0e-19  # m^2/W
-Length = 10   # length in mm
-Alpha = 0     # loss (dB/cm)
+# disp_file = 'dispersion/Si3N4_oxideclad_thick-750nm_widths-0.4-3.9_wav-0.40-3.00um.npz'
+# n2 = 2.0e-19    # m^2/W
+# width = 2.4     # micron
+# Length = 10     # length in mm
 
-# pulse parameters
+disp_file = 'dispersion/Ta2O5_oxideclad_thickness-800nm_widths-0.4-3.9_wav-0.40-3.00um.npz'
+n2 = 4.0e-19    # m^2/W
+width = 1.4     # micron
+Length = 4     # length in mm
+
+EPP = 100e-12   # Energy per pulse (J)
 FWHM = 0.100    # pulse duration (ps)
 pulseWL = 1550  # pulse central wavelength (nm)
-EPP = 100e-12   # Energy per pulse (J)
+Alpha = 0       # loss (dB/cm)
 GDD = 0.0       # Group delay dispersion (ps^2)
 TOD = 0.0       # Third order dispersion (ps^3)
 
