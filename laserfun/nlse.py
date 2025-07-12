@@ -21,8 +21,8 @@ def NLSE(
     pulse: Pulse,
     fiber: Fiber,
     nsaves: int = 200,
-    atol: float = 1e-4,
-    rtol: float = 1e-4,
+    atol: float = 1e-6,
+    rtol: float = 1e-6,
     reload_fiber: bool = False,
     raman: bool = False,
     custom_raman: tuple[float, float, float] | str = 'dudley',
@@ -59,9 +59,9 @@ def NLSE(
         function.
     atol : float
         Absolute tolerance for the integrator. Smaller values produce more
-        accurate results but require longer integration times. 1e-4 works well.
+        accurate results but require longer integration times.
     rtol : float
-        Relative tolerance for the integrator. 1e-4 work well.
+        Relative tolerance for the integrator.
     reload_fiber : boolean
         This determines if the fiber information is reloaded at each step. This
         should be set to True if the fiber properties (gamma, dispersion) vary
