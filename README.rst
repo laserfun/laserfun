@@ -65,11 +65,19 @@ The following subsections contain a few notes for developers.
 
 🐙 Unit tests
 ~~~~~~~~~~~~~
-To run the tests, go to the PyNLSE folder and run:
+To run the tests, go to the laserfun folder and run:
 
-    ``pytest nlse  -v  --cov=nlse``
+    ``pytest``
 
-Coverage can be checked with:
+Coverage can be checked by first installing pytest-cov with:
+
+     ``pip install pytest pytest-cov``
+
+Then, run the tests with:
+
+    ``pytest -v --cov=laserfun``
+
+and use:
 
     ``coverage html``
 

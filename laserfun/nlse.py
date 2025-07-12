@@ -25,7 +25,7 @@ def NLSE(
     rtol: float = 1e-4,
     reload_fiber: bool = False,
     raman: bool = False,
-    custom_raman: tuple[float, float, float] | str = (0, 0, 0),
+    custom_raman: tuple[float, float, float] | str = 'dudley',
     shock: bool = True,
     integrator: str = "lsoda",
     print_status: bool = True,
