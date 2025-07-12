@@ -1,7 +1,7 @@
 """Functions related to propagation of pulses according to the NLSE."""
 
-from pulse import Pulse
-from fiber import Fiber
+from .pulse import Pulse
+from .fiber import Fiber
 
 import numpy as np
 import matplotlib.pyplot as plt
