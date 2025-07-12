@@ -59,9 +59,9 @@ def NLSE(
         function.
     atol : float
         Absolute tolerance for the integrator. Smaller values produce more
-        accurate results but require longer integration times. 1e-4 works well.
+        accurate results but require longer integration times.
     rtol : float
-        Relative tolerance for the integrator. 1e-4 work well.
+        Relative tolerance for the integrator.
     reload_fiber : boolean
         This determines if the fiber information is reloaded at each step. This
         should be set to True if the fiber properties (gamma, dispersion) vary
