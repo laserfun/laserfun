@@ -2,7 +2,7 @@
 =============================
 Some fun functions for modeling laser pulses in Python. 
 
-Documentation is available at: [laserfun.readthedocs.io](https://laserfun.readthedocs.io/)
+Documentation is available at: `laserfun.readthedocs.io <https://laserfun.readthedocs.io/>`__
 
 😊 Introduction
 ---------------
@@ -10,15 +10,15 @@ Documentation is available at: [laserfun.readthedocs.io](https://laserfun.readth
 So far, laserfun consists mainly of:
 
 - The Pulse class, which handles the amplitude of the electric field of the pulse in the time and frequency domains. 
-- The Fiber class, which keeps track of the properties of the fiber, including the dispersion, nonlinearity, length, loss, etc. (By "fiber", we refer to any medium where it is appropriate to model a laser pulse in a single spatial mode which doesnt change over the propagation length. So, optical fibers and optical waveguides would be the most appropriate. Short distances of free-space propagation may also be appropriate, but important effects such as diffraction are ignored.)
-- The NLSE function, which models the propagation of a pulse object through a fiber object according to the generalized nonlinear Schrodinger equation (GNLSE) as described in "Supercontinuum Generation in Optical Fibers" Edited by J. M. Dudley and J. R. Taylor (Cambridge 2010).The GNLSE propagates an optical input field (a laser pulse) through a nonlinear material (a fiber) and takes into account dispersion and Chi-3 nonlinearity.
+- The Fiber class, which keeps track of the properties of the fiber, including the dispersion, nonlinearity, length, loss, etc. (By "fiber", we refer to any medium where it is appropriate to model a laser pulse in a single spatial mode which does not change over the propagation length. So, optical fibers and optical waveguides would be the most appropriate. Short distances of free-space propagation may also be appropriate, but important effects such as diffraction are ignored.)
+- The NLSE function, which models the propagation of a pulse object through a fiber object according to the generalized nonlinear Schrodinger equation (GNLSE) as described in "Supercontinuum Generation in Optical Fibers" Edited by J. M. Dudley and J. R. Taylor (Cambridge 2010). The GNLSE propagates an optical input field (a laser pulse) through a nonlinear material (a fiber) and takes into account dispersion and Chi-3 nonlinearity.
 
-🚀 Intallation 🚀
+🚀 Installation 🚀
 ------------------
 
-Laserfun is a python package, so you need python to run it. If you don't already have Python, we recommend an "all in one" Python package such as the `Anaconda Python Distribution <https://www.anaconda.com/products/individual>`__, which is available for free.
+Laserfun is a Python package, so you need Python to run it. If you don't already have Python, we recommend an "all in one" Python package such as the `Anaconda Python Distribution <https://www.anaconda.com/products/individual>`__, which is available for free.
 
-Next, download this repository by clicking on "Code" button and selecting "Download ZIP". Unzip the folder. Open a terminal or "Anaconda Prompt", navigate to the laserfun folder and type:
+Next, download this repository by clicking on the "Code" button and selecting "Download ZIP". Unzip the folder. Open a terminal or "Anaconda Prompt", navigate to the laserfun folder and type:
 
      ``pip install .``
      
@@ -33,8 +33,8 @@ laserfun requires Python 3.9+. `NumPy <https://www.numpy.org/>`__ and `SciPy <ht
 
 
 
-🤪 Example of use
------------------
+🤪 Example
+----------
 
 Here is a basic example that generates a pulse object using a 50-fs sech function, creates a fiber object with some dispersion, and propagates the pulse through the fiber using the NLSE. 
 
