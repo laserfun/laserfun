@@ -32,7 +32,6 @@ This method of installation allows you to modify the source code in-place withou
 laserfun requires Python 3.9+. `NumPy <https://www.numpy.org/>`__ and `SciPy <https://www.scipy.org/>`__ (version 1.6.0+) are also required, and `Matplotlib <https://matplotlib.org/>`__ is required to run the examples. 
 
 
-
 🤪 Example
 ----------
 
@@ -55,6 +54,10 @@ Here is the output:
    :alt: example NLSE output
 
 Additional examples are located in the `examples` directory. 
+
+🧙‍ Conventions
+---------------
+**Time:** We adopt to convention that negative times occur before positive times. So, a pulse plotted on standard, increasing time axis propagates from right to left.
 
 
 😎 Contributing
