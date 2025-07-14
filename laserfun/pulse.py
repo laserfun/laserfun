@@ -251,7 +251,7 @@ class Pulse:
         Units are ``sqrt(W)``, which can be considered ``sqrt(J)/sqrt(s)``,
         so units of energy per time bin when the absolute value is squared.
         """
-        return IFFT_t(self._aw.copy())
+        return IFFT(self._aw.copy())
 
     @property
     def it(self):
@@ -263,7 +263,7 @@ class Pulse:
 
     @at.setter
     def at(self, at_new):
-        self.aw = FFT_t(at_new)
+        self.aw = FFT(at_new)
 
     # epp, energy per pulse:
     @property
@@ -791,13 +791,54 @@ class Pulse:
             )
 
 
-def FFT_t(A, ax=0):
-    """Do a FFT with fft-shifting."""
+def FFT(A, ax=0):
+    """Perform a forward fast Fourier transform (FFT) to take an array of 
+    amplitudes in the TIME domain and transform them to the FREQUENCY domain.
+    
+    This function performs the FT, as well as the initial and final fftshifts.
+    The function of the final ifftshift is the usual shifting of the FT output
+    to put the zero frequency components back in the center. The function of
+    the initial fftshift is perhaps less obvious, but it is necessary in order
+    to take a time signal with a real peak in the center and return a frequency
+    spectrum with all-real components.
+    
+    In other words, we take a "human readable" time domain array, flip it into
+    the weird zero-at-the-edges format that the FFT likes, do the FFT, then 
+    flip the signal back. Confused? You're not alone.
+
+    Note that this function uses np.fft.ifft, the inverse fft function, while 
+    it purports to perform a forward FFT. The secret to this brain-breaking
+    madness can be found on Page 45 of Dudley's book "Supercontinuum Generation
+    in Optical Fibers" (Cambridge, 2010) and as described here:
+    https://github.com/laserfun/laserfun/issues/73
+    The convention chosen for the NLSE FTs flips the usual convention, using
+    the forward FFT to go from frequency to time.
+    
+    Parameters
+    ----------
+    A : numpy array, n-dimensional
+        The TIME domain data to be Fourier transformed. The transform will only
+        be performed along one axis. 
+    ax : int
+        The axis that the FT should be performed along. Defaults to 0.
+    
+    Returns
+    -------
+    FT : numpy array, same dimensions as A 
+        the fourier-transformed data, now in the FREQUENCY domain. 
+    """
+        
     A = A.astype("complex128")
-    return fft.ifftshift(fft.ifft(fft.fftshift(A, axes=(ax,)), axis=ax), axes=(ax,))
+    FT = fft.ifftshift(fft.ifft(fft.fftshift(A, axes=(ax,)), axis=ax), axes=(ax,))
+    return FT
 
 
-def IFFT_t(A, ax=0):
-    """Do an iFFT with fft-shifting."""
+def IFFT(A, ax=0):
+    """Perform an *inverse* FT to take an array of amplitudes in the FREQUENCY
+    domain and transform them to the TIME domain.
+    
+    See documentation for FFT_t"""
+    
     A = A.astype("complex128")
-    return fft.ifftshift(fft.fft(fft.fftshift(A, axes=(ax,)), axis=ax), axes=(ax,))
+    IFT = fft.ifftshift(fft.fft(fft.fftshift(A, axes=(ax,)), axis=ax), axes=(ax,))
+    return IFT

@@ -28,7 +28,7 @@ betas = [
 
 f = lf.Fiber(length=0.15, center_wl_nm=835, dispersion=betas, gamma_W_m=0.11)
 
-r = lf.NLSE(p, f, nsaves=200, raman=True, custom_raman="dudley")
+r = lf.NLSE(p, f, nsaves=200, raman=True, custom_raman="dudley", rtol=1e-4, atol=1e-4)
 z, new_wls, t, AW, AT = r.get_results_wavelength(
     wmin=400, wmax=1350, wn=400, data_type="dB"
 )

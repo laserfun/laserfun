@@ -209,6 +209,7 @@ ax4.set_xlabel("Time (ps)")
 ax4.set_ylabel("Intensity")
 
 print("Done.")
-fig4.savefig("Compressing in HNLF.png", dpi=250)
 
-plt.show()
+if __name__ == "__main__":
+    fig4.savefig("Compressing in HNLF.png", dpi=250)
+    plt.show()

@@ -1,6 +1,8 @@
 import laserfun as lf
 import numpy as np
 import os
+import sys
+
 
 # speed of light in m/s and nm/ps
 c_mks = 299792458.0
@@ -161,7 +163,10 @@ def test_nlse_psd():
 
     # TODO: figure out why the "per nm" tests require higher tolerances
 
-
+def test_examples():
+    sys.path.append(__file__+'../../examples')
+    import examples
+    print('Tested all examples in: ' + os.path.split(examples.__file__)[0])
 
 if __name__ == '__main__':
     print('test_pulse...')

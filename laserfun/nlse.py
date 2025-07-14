@@ -462,7 +462,7 @@ class PulseData:
 
         # fast interpolation to wavelength grid, so that we can plot using
         # imshow for fast viewing. This requires Scipy > 1.6.0.
-        AW_WLS = scipy.ndimage.interpolation.map_coordinates(
+        AW_WLS = scipy.ndimage.map_coordinates(
             AW,
             ((NEW_Z - np.min(z)) / (z[1] - z[0]), (NEW_F - np.min(f)) / (f[1] - f[0])),
             order=1,
