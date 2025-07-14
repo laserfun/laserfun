@@ -4,6 +4,7 @@ the disperison corresponds to a silicon nitride waveguide."""
 import numpy as np
 import laserfun as lf
 import scipy.interpolate
+import os
 
 # disp_file = 'dispersion/Si3N4_oxideclad_thick-750nm_widths-0.4-3.9_wav-0.40-3.00um.npz'
 # n2 = 2.0e-19    # m^2/W
@@ -32,7 +33,9 @@ Raman = False  # Enable Raman effect?
 Steep = True  # Enable self steepening?
 
 # load the dispersion file:
-data = np.load(disp_file)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data_file = os.path.join(script_dir, disp_file)
+data = np.load(data_file)
 wls = data["wav"] * 1e3
 aeff_int = scipy.interpolate.interp1d(data["widths"], data["aeff"], axis=0)
 neff_int = scipy.interpolate.interp1d(data["widths"], data["neff"], axis=0)
@@ -91,4 +94,5 @@ results = lf.NLSE(
     print_status=True,
 )
 
-results.plot(wavelength=True, units="dBm/nm", show=True, tlim=(-2, 2))
+if __name__ == "__main__":
+    results.plot(wavelength=True, units="dBm/nm", show=True, tlim=(-2, 2))
