@@ -61,6 +61,14 @@ ps2_nm = pulseWL**3 / (2 * np.pi**2 * 2.9979246e5**2)
 beta2 = disp1 * ps_nm_km  # (ps^2/km)
 beta3 = slope1 * ps2_nm2 + disp1 * ps2_nm  # (ps^3/km)
 
+beta3b = (pulseWL**4/(4*np.pi**2*2.9979246e5**2))*slope1 \
+        - (pulseWL/(np.pi*2.9979246e5))*beta2
+        
+print(beta3, beta3b)
+
+print(beta2, -(pulseWL**2) / (2 * np.pi * 2.9979246e5) * disp1)
+        
+
 # fiber 2
 beta22 = disp2 * ps_nm_km  # (ps^2/km)
 beta32 = slope2 * ps2_nm2 + disp2 * ps2_nm  # (ps^3/km)
