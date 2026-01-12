@@ -38,7 +38,7 @@ class Fiber:
             also determines the B values returned by the get_B function.
         dispersion_formats: string
             determines what format the dispersion is given in. Can be
-            'GVD' or 'D' or 'n'
+            'GVD', 'D', or 'n'
             Corresponding to :
             Beta coefficients (GVD, in units of ps^2/m or ps^2/km) or
             D (ps/nm/km)

@@ -163,6 +163,37 @@ def test_nlse_psd():
 
     # TODO: figure out why the "per nm" tests require higher tolerances
 
+def test_dispersion_tools():
+    """Test dispersion conversion tools."""
+    from laserfun import tools
+    
+    # Test values (approximate)
+    wl = 1550 # nm
+    D = 5 # ps/nm/km [SMF-28]
+    S = 0.025 # ps/nm^2/km
+    
+    # Calculate beta2
+    beta2 = tools.D2_to_beta2(wl, D)
+    
+    # Calculate D back
+    D_calc = tools.beta2_to_D2(wl, beta2)
+    assert np.isclose(D, D_calc), "D -> beta2 -> D failed"
+    
+    # Calculate beta3
+    beta3 = tools.D3_to_beta3(wl, D, S)
+    
+    # Calculate S back
+    S_calc = tools.beta3_to_D3(wl, beta3, D2=D)
+    assert np.isclose(S, S_calc), "S -> beta3 -> S failed"
+
+    # Explicit check for beta2 and beta3 values
+    expected_beta2 = -6.377240954930596
+    expected_beta3 = 0.051164480183629686
+    
+    assert np.isclose(beta2, expected_beta2), f"Expected beta2={expected_beta2}, got {beta2}"
+    assert np.isclose(beta3, expected_beta3), f"Expected beta3={expected_beta3}, got {beta3}"
+
+
 def test_examples():
     sys.path.append(__file__+'../../examples')
     import examples
@@ -181,9 +212,14 @@ if __name__ == '__main__':
     test_fiber()
     print('test_nlse_psd')
     test_nlse_psd()
+    print('test_dispersion_tools...')
+    test_dispersion_tools()
     print('Testing examples...')
-    import sys
-    sys.path.append(__file__+'../../examples')
+    examples_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../examples'))
+    sys.path.append(examples_path)
     import examples
-    print('Tested all examples in: ' + os.path.split(examples.__file__)[0])
+    if hasattr(examples, '__file__') and examples.__file__:
+        print('Tested all examples in: ' + os.path.split(examples.__file__)[0])
+    else:
+        print(f'Tested examples in: {examples_path}')
     print('Tests complete!')
