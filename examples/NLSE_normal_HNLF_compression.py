@@ -19,6 +19,7 @@ FWHM = 0.8  # pulse duration (ps)
 EPP = 300e-12  # Energy per pulse (J)
 
 # Fiber 1:
+fiberWL = 1550  # fiber central wavelength (nm)
 disp1 = -2.4  # fiber dispersion in ps/(nm km)
 slope1 = 0.025  # dispersion slope in ps/(nm^2 km)
 length1 = 5  # length of first fiber in meters
@@ -26,6 +27,7 @@ alpha1 = 0  # loss (dB/cm)
 gamma1 = 10.8  # nonlinearity (1/(W km))
 
 # - second fiber:
+fiberWL2 = 1550  # fiber central wavelength (nm)
 disp2 = 18  # fiber dispersion in ps/(nm km)
 slope2 = 0.025  # dispersion slope in ps/(nm^2 km)
 length2 = 1.8  # length of second fiber in meters
@@ -53,17 +55,13 @@ level = 0.4  # level relative to maximum to evaluate pulse duration
 
 # ----- END OF PARAMETERS -----
 
-ps_nm_km = -(pulseWL**2) / (2 * np.pi * 2.9979246e5)  # conversion for D2
-ps2_nm2 = pulseWL**4 / (4 * np.pi**2 * 2.9979246e5**2)  # conversion for D3
-ps2_nm = pulseWL**3 / (2 * np.pi**2 * 2.9979246e5**2)
-
 # fiber1
-beta2 = disp1 * ps_nm_km  # (ps^2/km)
-beta3 = slope1 * ps2_nm2 + disp1 * ps2_nm  # (ps^3/km)
+beta2 = lf.tools.D2_to_beta2(fiberWL, disp1)
+beta3 = lf.tools.D3_to_beta3(fiberWL, disp1, slope1)
 
 # fiber 2
-beta22 = disp2 * ps_nm_km  # (ps^2/km)
-beta32 = slope2 * ps2_nm2 + disp2 * ps2_nm  # (ps^3/km)
+beta22 = lf.tools.D2_to_beta2(fiberWL2, disp2)
+beta32 = lf.tools.D3_to_beta3(fiberWL2, disp2, slope2)
 
 # create the pulse
 pulse_in = lf.Pulse(
@@ -81,7 +79,7 @@ pulse_in = lf.Pulse(
 # create the fiber
 fiber1 = lf.Fiber(
     length1,
-    center_wl_nm=pulseWL,
+    center_wl_nm=fiberWL,
     dispersion_format="GVD",
     dispersion=(beta2 * 1e-3, beta3 * 1e-3),
     gamma_W_m=gamma1 * 1e-3,
@@ -109,7 +107,7 @@ pulse1.aw = pulse1.aw * np.sqrt(fraction)
 # create the fiber!
 fiber2 = lf.Fiber(
     length2,
-    center_wl_nm=pulseWL,
+    center_wl_nm=fiberWL2,
     dispersion_format="GVD",
     dispersion=(beta22 * 1e-3, beta32 * 1e-3),
     gamma_W_m=gamma2 * 1e-3,

@@ -60,15 +60,10 @@ level = 0.4  # level relative to maximum to evaluate pulse duration
 
 # ----- END OF PARAMETERS -----
 
-ps_nm_km = -(pulseWL**2) / (2 * np.pi * 2.9979246e5)  # conversion for D2
-ps2_nm2 = pulseWL**4 / (4 * np.pi**2 * 2.9979246e5**2)  # conversion for D3
-ps2_nm = pulseWL**3 / (2 * np.pi**2 * 2.9979246e5**2)
+beta2 = lf.tools.D2_to_beta2(pulseWL, disp)
+beta3 = lf.tools.D3_to_beta3(pulseWL, disp, slope)
 
-# fiber1
-beta2 = disp * ps_nm_km  # (ps^2/km)
-beta3 = slope * ps2_nm2 + disp * ps2_nm  # (ps^3/km)
-
-
+print(beta2, beta3)
 # create the pulse
 pulse_in = lf.Pulse(
     pulse_type="sech",
