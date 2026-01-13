@@ -1,5 +1,5 @@
 """Functions related to propagation of pulses according to the NLSE."""
-
+from __future__ import annotations
 from .pulse import Pulse
 from .fiber import Fiber
 

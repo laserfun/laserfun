@@ -131,7 +131,26 @@ class TreacyCompressor:
         else:
              raise ValueError("Must provide either incident_angle_degrees or littrow_wavelength_nm.")
         
-    def calc_dispersion(self, wavelength_nm, grating_separation_meters, order=[2, 3, 4]):
+    def calc_compressor_gdd(self, wavelength_nm, grating_separation_meters):
+        """Calculate the Group Delay Dispersion (GDD) [s^2] for a double-pass compressor.
+        
+        Parameters
+        ----------
+        wavelength_nm : float
+            Center wavelength in nanometers.
+        grating_separation_meters : float
+            Perpendicular separation between the gratings in meters (G).
+            
+        Returns
+        -------
+        gdd : float
+            Group Delay Dispersion in s^2.
+        """
+        return 2.0 * self.calc_dt_dw_singlepass(wavelength_nm,
+                                                 grating_separation_meters,
+                                                 verbose = False)
+    
+    def calc_compressor_HOD(self, wavelength_nm, grating_separation_meters, dispersion_order):
         """Calculate arbitrary higher-order dispersion (GDD, TOD, etc.).
         
         Calculates the n-th order derivative of spectral phase with respect to
@@ -143,79 +162,48 @@ class TreacyCompressor:
             Center wavelength in nanometers.
         grating_separation_meters : float
             Perpendicular separation between the gratings in meters.
-        order : int or list of int
+        dispersion_order : int
             Order of dispersion (e.g., 2 for GDD, 3 for TOD). Must be >= 2.
-            If a list, returns an array of dispersion values.
-            Default is [2, 3, 4], returning GDD, TOD, and 4th order dispersion.
             
         Returns
         -------
-        disp : float or ndarray
-            Dispersion value(s) in common laser units (ps^n).
+        hod : float
+            Dispersion value in SI units (s^n).
         """
-        if isinstance(order, (list, np.ndarray)):
-            return np.array([self.calc_dispersion(wavelength_nm, grating_separation_meters, o) for o in order])
-
-        if order < 2:
+        if dispersion_order < 2:
              raise ValueError("Order must be >= 2.")
         
-        if order == 2:
-            # Result is in s^2
-            res_s2 = 2.0 * self.calc_dt_dw_singlepass(wavelength_nm, grating_separation_meters)
-            return res_s2 * (1.0e12)**2 # Convert to ps^2
+        if dispersion_order == 2:
+            return self.calc_compressor_gdd(wavelength_nm, grating_separation_meters)
 
-        # For orders > 2, we take the numerical derivative of GDD (which is already in ps^2) 
+        # For TOD (order=3), we want d(GDD)/dw 
+        # GDD is 2nd deriv of Phase. TOD is 3rd deriv.
+        # calc_compressor_gdd returns GDD.
+        # So we need (dispersion_order - 2) derivative of GDD with respect to omega.
+        
         def gdd_from_w(w):
              # w in rad/s
              l_meters = 2 * np.pi * c_mks / w
-             return self.calc_dispersion(l_meters * 1e9, grating_separation_meters, order=2)
+             return self.calc_compressor_gdd(l_meters * 1e9, grating_separation_meters)
 
         w0 = 2 * np.pi * c_mks / (wavelength_nm * 1e-9)
         
-        # Use numerical derivative. 
-        # Since gdd_from_w returns ps^2 and we derive wrt omega (rad/s),
-        # each derivative adds a factor of [s].
-        # Result units: [ps^2] * [s]^(order-2) = [ps^2] * [10^12 ps]^(order-2) = ps^order
-        n_deriv = order - 2
-        res = _central_difference(gdd_from_w, w0, dx=w0*1e-5, n=n_deriv)
-        return res * (1.0e12)**n_deriv
+        # Use numerical derivative
+        # For TOD (3), n=1 derivative of GDD
+        n_deriv = dispersion_order - 2
+        return _central_difference(gdd_from_w, w0, dx=w0*1e-5, n=n_deriv)
     
-    def calc_dispersion_D(self, wavelength_nm, grating_separation_meters):
-        """Calculate dispersion in engineering units (D and S).
-        
-        Parameters
-        ----------
-        wavelength_nm : float
-            Center wavelength in nanometers.
-        grating_separation_meters : float or ndarray
-            Perpendicular separation between the gratings in meters.
-            
-        Returns
-        -------
-        D : float or ndarray
-            Dispersion parameter in ps/nm.
-        S : float or ndarray
-            Dispersion slope in ps/nm^2.
-        """
-        # Calculate beta2 and beta3 in ps^2 and ps^3
-        disp = self.calc_dispersion(wavelength_nm, grating_separation_meters, order=[2, 3])
-        
-        # If input was array-like, disp is (2, N)
-        if disp.ndim == 2:
-            beta2, beta3 = disp
-        else:
-            beta2, beta3 = disp
-            
-        D = beta2_to_D2(wavelength_nm, beta2)
-        S = beta3_to_D3(wavelength_nm, beta3, beta2=beta2)
-        return D, S
-
     def calc_theta(self, wavelength_nm):
+        l = wavelength_nm * 1.0e-9
         # solve the grating equation for the diffracted angle
-        arg = wavelength_nm * 1.0e-9/self.d - np.sin(self.g)
+        # sin(alpha) + sin(beta) = m lambda / d    (m=1)
+        # beta = arcsin(lambda/d - sin(alpha))
         
-        # For robustness, clamp values slightly outside [-1, 1] due to float precision
+        arg = l/self.d - np.sin(self.g)
+        
+        # Check for numeric range issues
         if np.any(arg < -1) or np.any(arg > 1):
+             # For robustness, clamp values slightly outside [-1, 1] due to float precision
              arg = np.clip(arg, -1.0, 1.0)
         
         alpha = np.arcsin(arg)
@@ -223,96 +211,92 @@ class TreacyCompressor:
         return theta
 
     def calc_dt_dw_singlepass(self, wavelength_nm,
-                              grating_separation_meters):
+                              grating_separation_meters,
+                              verbose = False):
         """Calculate dt/dw (Eq. 1 in class docstring) for a single pass."""
+        c = c_mks
         G = grating_separation_meters
         l = wavelength_nm * 1.0e-9         
-        w = 2.0 * np.pi * c_mks / l        
+        w = 2.0 * np.pi * c / l        
         theta = self.calc_theta(wavelength_nm)
         gamma = self.g
         b = G / np.cos(gamma - theta)
         
         # Equation 1 from docstring
-        num = -4.0 * np.pi**2 * c_mks * b
-        denom = w**3 * self.d**2 * (1.0 - (2.0*np.pi*c_mks/(w*self.d) - np.sin(gamma))**2 )
+        num = -4.0 * np.pi**2 * c * b
+        denom = w**3 * self.d**2 * (1.0 - (2.0*np.pi*c/(w*self.d) - np.sin(gamma))**2 )
         return num / denom
                 
     def calc_dphi_domega(self, omega,
-                              grating_separation_meters):        
+                              grating_separation_meters,
+                              verbose = False):        
         """Calculate dphi/dw (Group Delay) for a single pass."""
-        wavelength_nm = 1.0e9 * 2.0 * np.pi * c_mks / omega
+        c = c_mks
+        wavelength_nm = 1.0e9 * 2.0 * np.pi * c / omega
         G = grating_separation_meters
         theta = self.calc_theta(wavelength_nm)
         gamma = self.g
         b = G / np.cos(gamma - theta)
         p = b * (1.0 + np.cos(theta))
-        return p / c_mks
+        return p / c
         
+
+    
     def apply_phase_to_pulse(self, grating_separation_meters, pulse):
-        """ Apply grating dispersion to a Pulse instance. This applies the 
-        full dispersion, without making the GDD/TOD/FOD approximations.
+        """ Apply grating dispersion (all orders) to a Pulse instance."""
+        w_grid = pulse.w_THz * 2.0 * np.pi * 1e12 # angular frequency grid
+        w0 = pulse.centerfrequency_THz * 2.0 * np.pi * 1e12
         
-        Phase is computed by a double numerical integration of the Group 
-        Delay Dispersion (GDD). The integration is performed outwards from 
-        the center frequency to maintain precision at the center wavelength
-        while still capturing the weirdness that happens near the "grazing limit"
-        Wavelengths beyond the grazing limit are zeroed out as they cannot be 
-        physically transmitted.
-        """
-        w0 = pulse.centerfrequency_THz * 2.0 * np.pi * 1.0e12
-        w_grid = pulse.w_THz * 1.0e12
-        l_meters = (2.0 * np.pi * c_mks / w_grid)
-
-        # 1. Identify diffraction limit (Horizon)
-        # arg = l/d - sin(gamma). Diffraction limit is when arg >= 1
-        arg = l_meters / self.d - np.sin(self.g)
+        # Calculate group delay at center frequency to subtract it (center the pulse)
+        # dphi/dw represents group delay (τ_g)
+        # We integrate from w0, so phase(w0) = 0.
+        # But dphi/dw(w0) is not zero. It is the absolute delay through the compressor.
+        # We must subtract this linear slope to keep the pulse in the window.
         
-        # A safety mask to handle numerical singularities at Horizon 
-        # and ignore non-physical negative frequencies.
-        diffraction_mask = (arg < 1.0 - 1e-12) & (w_grid > 0)
+        gd_at_center = 2.0 * self.calc_dphi_domega(w0, grating_separation_meters)
         
-        # 2. Calculate GDD (double pass)
-        y_gdd = np.zeros_like(w_grid)
-        # calc_dt_dw_singlepass returns analytical GDD for single pass
-        y_gdd[diffraction_mask] = 2.0 * self.calc_dt_dw_singlepass(
-            1e9 * l_meters[diffraction_mask], 
-            grating_separation_meters
-        )
+        def integrand(w):
+             # Double pass -> factor of 2.0
+             return 2.0 * self.calc_dphi_domega(w, grating_separation_meters)
         
-        # 3. First integration: GDD -> Relative Group Delay (GD_rel)
-        # We integrate from w0 outwards to ensure GD_rel(w0) = 0 and 
-        # to maintain 16 orders of precision (avoiding edge singularities).
+        # Calculate phase by integrating group delay from w0
+        # phi(w) = int_{w0}^{w} GD(w') dw'
+        # Split integration: forward for w > w0, backward for w < w0
+        
         w0_idx = np.argmin(np.abs(w_grid - w0))
-        gd_rel = np.zeros_like(w_grid)
-        
-        if w0_idx < len(w_grid) - 1:
-            gd_rel[w0_idx:] = integrate.cumulative_trapezoid(
-                y_gdd[w0_idx:], w_grid[w0_idx:], initial=0
-            )
-        if w0_idx > 0:
-            gd_rel[:w0_idx+1] = integrate.cumulative_trapezoid(
-                y_gdd[:w0_idx+1][::-1], w_grid[:w0_idx+1][::-1], initial=0
-            )[::-1]
-            
-        # 4. Second integration: GD_rel -> Spectral Phase
         phase = np.zeros_like(w_grid)
+        
+        # For w >= w0: integrate forward
         if w0_idx < len(w_grid) - 1:
-            phase[w0_idx:] = integrate.cumulative_trapezoid(
-                gd_rel[w0_idx:], w_grid[w0_idx:], initial=0
-            )
+            y_upper = integrand(w_grid[w0_idx:])
+            phase_upper = integrate.cumulative_trapezoid(y_upper, w_grid[w0_idx:], initial=0)
+            phase[w0_idx:] = phase_upper
+        
+        # For w < w0: integrate backward (negative integral)
         if w0_idx > 0:
-            phase[:w0_idx+1] = integrate.cumulative_trapezoid(
-                gd_rel[:w0_idx+1][::-1], w_grid[:w0_idx+1][::-1], initial=0
-            )[::-1]
-            
-        # 5. Final shift to ensure phi(w0) = 0 exactly
-        phase -= phase[w0_idx]
-
-        # 6. Apply to pulse and mask intensities beyond diffraction limit
-        pulse.aw = pulse.aw * np.exp(1j * phase)
-        pulse.aw[~diffraction_mask] = 0.0
-
-
-
-
-
+            # Reverse arrays, integrate, then flip and negate
+            y_lower = integrand(w_grid[:w0_idx+1][::-1])
+            phase_lower = integrate.cumulative_trapezoid(y_lower, w_grid[:w0_idx+1][::-1], initial=0)
+            phase[:w0_idx+1] = -phase_lower[::-1]
+        
+        # Now remove linear component (Group Delay at w0) to keep pulse centered
+        # A time delay τ corresponds to phase: phi(w) = -w * τ
+        # So to remove the delay, we ADD w * τ to the phase
+        # But we want to keep phi(w0) = 0, so we use: w * τ - w0 * τ = (w - w0) * τ
+        # Actually, let's think about this more carefully:
+        # The group delay GD(w0) represents dphi/dw at w0
+        # To remove a constant time shift, we subtract a linear phase
+        # But the phase we calculated already has phi(w0) = 0
+        # The issue is that dphi/dw at w0 should also be zero for no time shift
+        # So we need to subtract: (w - w0) * GD(w0)
+        # This makes dphi/dw = 0 at w0 while keeping phi(w0) = 0
+        linear_correction = (w_grid - w0) * gd_at_center
+        final_phase = phase - linear_correction
+        
+        # The phase should now have: phi(w0) = 0 and dphi/dw|_{w=w0} = 0
+        # But due to grid mismatch, phi(w0_idx) might not be exactly zero
+        # Add a constant to ensure phi = 0 at the grid point closest to w0
+        final_phase = final_phase - final_phase[w0_idx]
+        
+        # Apply phase to pulse
+        pulse.aw = pulse.aw * np.exp(1j * final_phase)

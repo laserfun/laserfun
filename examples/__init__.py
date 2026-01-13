@@ -8,4 +8,7 @@ from . import NLSE_pulse_propagation
 from . import NLSE_simple
 from . import NLSE_waveguide
 from . import pulse_compare_shapes
+from . import pulse_dispersion
 from . import spectrogram_plot_example
+from . import grating_compressor
+from . import grating_compressor_expansion
