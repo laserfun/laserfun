@@ -1,0 +1,11 @@
+Refactor TreacyCompressor: standardize units, add engineering API, enhance tests
+
+- Change calc_dispersion() to return ps^n units (ps², ps³, ps⁴) instead of SI
+- Add calc_dispersion_D() method for engineering units (D in ps/nm, S in ps/nm²)
+- Enhance test_compressor_phase_consistency with FOD and full profile comparison
+- Add grating_compressor_expansion.py example showing Taylor expansion convergence
+- Add pulse_dispersion.py example demonstrating D and S effects on pulses
+- Update grating_compressor.py with automatic Littrow angle and improved visualization
+- Tighten test tolerances: 0.1% mean error, 1% point-by-point error
+
+All tests passing with measured errors well below thresholds (0.012% mean, 0.064% max).

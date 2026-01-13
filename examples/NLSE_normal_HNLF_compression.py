@@ -29,7 +29,7 @@ gamma1 = 10.8  # nonlinearity (1/(W km))
 # - second fiber:
 fiberWL2 = 1550  # fiber central wavelength (nm)
 disp2 = 18  # fiber dispersion in ps/(nm km)
-slope2 = 0.025  # dispersion slope in ps/(nm^2 km)
+slope2 = 0.056  # dispersion slope in ps/(nm^2 km)
 length2 = 1.8  # length of second fiber in meters
 alpha2 = 0  # loss (dB/cm)
 gamma2 = 0.78  # nonlinearity (1/(W km))
@@ -137,7 +137,6 @@ fig2, axs2 = results2.plot(flim=(188, 200), tlim=(-2, 2), show=False)
 # calculate pulse durations
 fig3, ax3 = plt.subplots(1, 1, figsize=(8, 5), tight_layout=True)
 
-
 def calc_width(t_ps, at, level=level):
     def find_roots(x, y):
         s = np.abs(np.diff(np.sign(y))).astype(bool)
@@ -151,7 +150,6 @@ def calc_width(t_ps, at, level=level):
 
 
 widths1 = np.zeros_like(results1.z)
-widths2 = np.zeros_like(results2.z)
 widths2 = np.zeros_like(results2.z)
 
 for n, at in enumerate(results1.AT):
@@ -208,6 +206,7 @@ ax4.set_ylabel("Intensity")
 
 print("Done.")
 
+fig4.savefig("Compressing in HNLF.png", dpi=250)
+
 if __name__ == "__main__":
-    fig4.savefig("Compressing in HNLF.png", dpi=250)
     plt.show()
