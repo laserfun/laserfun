@@ -243,55 +243,60 @@ class TreacyCompressor:
 
     
     def apply_phase_to_pulse(self, grating_separation_meters, pulse):
-        """ Apply grating dispersion (all orders) to a Pulse instance.
+        """ Apply grating dispersion (all orders) to a Pulse instance."""
+        w_grid = pulse.w_THz * 2.0 * np.pi * 1e12 # angular frequency grid
+        w0 = pulse.centerfrequency_THz * 2.0 * np.pi * 1e12
         
-        Phase is computed by numerical integration of dphi/domega (from Treacy).
-        This version is optimized for speed and robustness on large frequency grids.
-        """
-        w0 = pulse.centerfrequency_THz * 2.0 * np.pi * 1.0e12
-        w_grid = pulse.w_THz * 1.0e12   # absolute angular freq (rad/s)
-        v_grid = pulse.v_THz * 1.0e12   # relative angular freq (rad/s)
-
+        # Calculate group delay at center frequency to subtract it (center the pulse)
+        # dphi/dw represents group delay (τ_g)
+        # We integrate from w0, so phase(w0) = 0.
+        # But dphi/dw(w0) is not zero. It is the absolute delay through the compressor.
+        # We must subtract this linear slope to keep the pulse in the window.
         
-        # 1. Calculate Group Delay for each point on the grid.
-        # We mask out non-physical frequencies (omega <= 0) to avoid errors.
-        mask = w_grid > 1e12 # Limit to frequencies > 1 THz
-        y = np.zeros_like(w_grid)
-        if np.any(mask):
-            # double pass group delay
-            y[mask] = 2.0 * self.calc_dphi_domega(w_grid[mask], grating_separation_meters)
-
-        # 2. Integrate to get spectral phase: phi(w) = int_{w0}^{w} GD(w') dw'
-        # Split integration at w0 to ensure phi(w0) = 0.
+        gd_at_center = 2.0 * self.calc_dphi_domega(w0, grating_separation_meters)
+        
+        def integrand(w):
+             # Double pass -> factor of 2.0
+             return 2.0 * self.calc_dphi_domega(w, grating_separation_meters)
+        
+        # Calculate phase by integrating group delay from w0
+        # phi(w) = int_{w0}^{w} GD(w') dw'
+        # Split integration: forward for w > w0, backward for w < w0
+        
         w0_idx = np.argmin(np.abs(w_grid - w0))
         phase = np.zeros_like(w_grid)
         
-        # Forward integration
+        # For w >= w0: integrate forward
         if w0_idx < len(w_grid) - 1:
-            phase[w0_idx:] = integrate.cumulative_trapezoid(y[w0_idx:], w_grid[w0_idx:], initial=0)
-        # Backward integration: Integrate from w0 down to w_min.
-        # cumulative_trapezoid on reversed arrays handles the sign naturally because dx is negative.
+            y_upper = integrand(w_grid[w0_idx:])
+            phase_upper = integrate.cumulative_trapezoid(y_upper, w_grid[w0_idx:], initial=0)
+            phase[w0_idx:] = phase_upper
+        
+        # For w < w0: integrate backward (negative integral)
         if w0_idx > 0:
-            phase[:w0_idx+1] = integrate.cumulative_trapezoid(y[:w0_idx+1][::-1], w_grid[:w0_idx+1][::-1], initial=0)[::-1]
-
-        # 3. Centering: remove the linear phase (group delay at w0).
-        # To keep the pulse peak at the center of the time window, we subtract
-        # the group delay slope at the center frequency (w0).
-        # Since the integrated phase satisfies d(phase)/dw = y, the slope at 
-        # w0 is just y[w0_idx].
-        slope_at_w0 = y[w0_idx]
-
-        # 4. Final phase with group delay correction
-        # Subtracting (v_grid * slope) removes the time delay τ = dphi/dw
-        final_phase = phase - v_grid * slope_at_w0
+            # Reverse arrays, integrate, then flip and negate
+            y_lower = integrand(w_grid[:w0_idx+1][::-1])
+            phase_lower = integrate.cumulative_trapezoid(y_lower, w_grid[:w0_idx+1][::-1], initial=0)
+            phase[:w0_idx+1] = -phase_lower[::-1]
         
-        # Ensure phi(w0_idx) = 0 exactly to keep the phase centered on the grid
-        final_phase -= final_phase[w0_idx]
+        # Now remove linear component (Group Delay at w0) to keep pulse centered
+        # A time delay τ corresponds to phase: phi(w) = -w * τ
+        # So to remove the delay, we ADD w * τ to the phase
+        # But we want to keep phi(w0) = 0, so we use: w * τ - w0 * τ = (w - w0) * τ
+        # Actually, let's think about this more carefully:
+        # The group delay GD(w0) represents dphi/dw at w0
+        # To remove a constant time shift, we subtract a linear phase
+        # But the phase we calculated already has phi(w0) = 0
+        # The issue is that dphi/dw at w0 should also be zero for no time shift
+        # So we need to subtract: (w - w0) * GD(w0)
+        # This makes dphi/dw = 0 at w0 while keeping phi(w0) = 0
+        linear_correction = (w_grid - w0) * gd_at_center
+        final_phase = phase - linear_correction
         
-        # Apply to pulse
+        # The phase should now have: phi(w0) = 0 and dphi/dw|_{w=w0} = 0
+        # But due to grid mismatch, phi(w0_idx) might not be exactly zero
+        # Add a constant to ensure phi = 0 at the grid point closest to w0
+        final_phase = final_phase - final_phase[w0_idx]
+        
+        # Apply phase to pulse
         pulse.aw = pulse.aw * np.exp(1j * final_phase)
-
-
-
-
-

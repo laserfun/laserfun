@@ -194,6 +194,70 @@ def test_dispersion_tools():
     assert np.isclose(beta3, expected_beta3), f"Expected beta3={expected_beta3}, got {beta3}"
 
 
+def test_compressor_pynlo():
+    """Test TreacyCompressor against values from PyNLO."""
+    from laserfun import tools
+    
+    # Parameters from user
+    wl = 1545.0 # nm
+    lines_per_mm = 1000
+    incident_angle_deg = 50.5789
+    separations = np.array([0.0, 0.1, 0.2, 0.3])
+    
+    # Expected results (from PyNLO)
+    # These values now match exactly with the user's PyNLO run at 1545 nm.
+    expected_gdd = np.array([0.00000000e+00, -5.10085847e-24, -1.02017169e-23, -1.53025754e-23])
+    expected_tod = np.array([0.00000000e+00, 4.97008481e-38, 9.94016963e-38, 1.49102544e-37])
+    
+    compressor = tools.TreacyCompressor(lines_per_mm=lines_per_mm, incident_angle_degrees=incident_angle_deg)
+    
+    calc_gdd = []
+    calc_tod = []
+    
+    for sep in separations:
+        # HOD order 2 = GDD
+        gdd = compressor.calc_compressor_HOD(wl, sep, 2)
+        calc_gdd.append(gdd)
+        
+        # HOD order 3 = TOD
+        tod = compressor.calc_compressor_HOD(wl, sep, 3)
+        calc_tod.append(tod)
+        
+    calc_gdd = np.array(calc_gdd)
+    calc_tod = np.array(calc_tod)
+    
+    # Verify GDD
+    # rtol=1e-4 should be sufficient given floating point diffs
+    assert np.allclose(calc_gdd, expected_gdd, rtol=1e-4, atol=1e-30), \
+        f"GDD mismatch.\nExpected: {expected_gdd}\nGot: {calc_gdd}"
+        
+    # Verify TOD
+    assert np.allclose(calc_tod, expected_tod, rtol=1e-4, atol=1e-45), \
+        f"TOD mismatch.\nExpected: {expected_tod}\nGot: {calc_tod}"
+
+
+def test_compressor_littrow():
+    """Test TreacyCompressor Littrow initialization."""
+    from laserfun import tools
+    
+    wl_nm = 1030
+    lines = 1000
+    
+    # Init at Littrow
+    comp = tools.TreacyCompressor(lines_per_mm=lines, littrow_wavelength_nm=wl_nm)
+    
+    # Calculate expected Littrow angle
+    # sin(theta) = lambda / 2d
+    d = 1e-3 / lines
+    expected_theta_rad = np.arcsin(wl_nm * 1e-9 / (2 * d))
+    
+    assert np.isclose(comp.g, expected_theta_rad), f"Littrow angle mismatch. Got {comp.g}, expected {expected_theta_rad}"
+    
+    # Verify we can calc GDD without error
+    gdd = comp.calc_compressor_gdd(wl_nm, 0.1)
+    assert np.isfinite(gdd)
+
+
 def test_examples():
     sys.path.append(__file__+'../../examples')
     import examples
@@ -214,6 +278,10 @@ if __name__ == '__main__':
     test_nlse_psd()
     print('test_dispersion_tools...')
     test_dispersion_tools()
+    print('test_compressor_pynlo...')
+    test_compressor_pynlo()
+    print('test_compressor_littrow...')
+    test_compressor_littrow()
     print('Testing examples...')
     examples_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../examples'))
     sys.path.append(examples_path)
