@@ -14,7 +14,10 @@ def beta2_to_D2(wavelength_nm, beta2):
     return -(2.0 * np.pi * c_nmps) / (wavelength_nm**2) * beta2
 
 def D3_to_beta3(wavelength_nm, D2, D3):
-    """Convert dispersion D and slope S to TOD beta3 [ps^3/km]."""
+    """Convert dispersion D and slope S to TOD beta3 [ps^3/km].
+    Note that S is the dispersion slope and not the D3 used in the taylor expansion,
+    which is related by S = 2*D3.
+    """
     term_slope = (wavelength_nm**4) / (4.0 * np.pi**2 * c_nmps**2) * D3
     term_D = (wavelength_nm**3) / (2.0 * np.pi**2 * c_nmps**2) * D2
     return term_slope + term_D
@@ -182,6 +185,8 @@ class TreacyCompressor:
     
     def calc_dispersion_D(self, wavelength_nm, grating_separation_meters):
         """Calculate dispersion in engineering units (D and S).
+        Note that S is the dispersion slope and not the D3 used in the taylor expansion,
+        which is related by S = 2*D3.
         
         Parameters
         ----------

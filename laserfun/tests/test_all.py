@@ -3,6 +3,12 @@ import numpy as np
 import os
 import sys
 
+# NumPy 2.0 compatibility: use trapezoid if available, otherwise trapz
+if hasattr(np, 'trapezoid'):
+    trapz = np.trapezoid
+else:
+    trapz = np.trapz
+
 
 # speed of light in m/s and nm/ps
 c_mks = 299792458.0
@@ -51,17 +57,17 @@ def test_pulse_psd():
 
     # now, calculate the average power by integrating each PSD method
 
-    assert np.abs(np.trapz(pulse.psd('mW/bin', rep_rate=rr)) - mW) < tol
-    assert np.abs(np.trapz(pulse.psd('mW/THz', rep_rate=rr)*df) - mW) < tol
+    assert np.abs(trapz(pulse.psd('mW/bin', rep_rate=rr)) - mW) < tol
+    assert np.abs(trapz(pulse.psd('mW/THz', rep_rate=rr)*df) - mW) < tol
 
     dBm_per_THz = pulse.psd('dBm/THz', rep_rate=rr)
-    assert np.trapz(10**(0.1*dBm_per_THz)) * df - mW < tol
+    assert trapz(10**(0.1*dBm_per_THz)) * df - mW < tol
 
     mW_per_nm = pulse.psd('mW/nm', rep_rate=rr)
-    assert np.trapz(mW_per_nm, x=wl) - mW < tol
+    assert trapz(mW_per_nm, x=wl) - mW < tol
 
     dBm_per_nm = pulse.psd('dBm/nm', rep_rate=rr)
-    assert np.trapz(10**(0.1*dBm_per_nm), x=wl) - mW < tol
+    assert trapz(10**(0.1*dBm_per_nm), x=wl) - mW < tol
 
 
 def test_fiber():
@@ -136,30 +142,30 @@ def test_nlse_psd():
     r = lf.NLSE(pulse, fiber, print_status=False)
     
     z, f, t, AW, AT = r.get_results(data_type='mW/bin', rep_rate=rr)
-    assert np.allclose(np.trapz(AW, axis=1), mW, **k)
-    assert np.allclose(np.trapz(AT, axis=1), mW, **k)
+    assert np.allclose(trapz(AW, axis=1), mW, **k)
+    assert np.allclose(trapz(AT, axis=1), mW, **k)
         
     z, f, t, AW, AT = r.get_results(data_type='mW/THz', rep_rate=rr)
     df = f[1] - f[0]
     dt = t[1] - t[0]
-    assert np.allclose(np.trapz(AW*df, axis=1), mW, **k)
-    assert np.allclose(np.trapz(AT*dt, axis=1), mW, **k)
+    assert np.allclose(trapz(AW*df, axis=1), mW, **k)
+    assert np.allclose(trapz(AT*dt, axis=1), mW, **k)
     
     z, f, t, AW, AT = r.get_results(data_type='dBm/THz', rep_rate=rr)
-    assert np.allclose(np.trapz(10**(0.1*AW)*df, axis=1), mW, **k)
-    assert np.allclose(np.trapz(10**(0.1*AT)*dt, axis=1), mW, **k)
+    assert np.allclose(trapz(10**(0.1*AW)*df, axis=1), mW, **k)
+    assert np.allclose(trapz(10**(0.1*AT)*dt, axis=1), mW, **k)
 
     z, f, t, AW, AT = r.get_results(data_type='mW/nm', rep_rate=rr)
     wl = c_nmps/f
-    trapz = np.trapz(AW[:,::-1], axis=1, x=wl[::-1])
-    assert np.allclose(trapz, mW, rtol=1e-6, atol=0)
-    assert np.allclose(np.trapz(AT*dt, axis=1), mW, **k)
+    trapz_result = trapz(AW[:,::-1], axis=1, x=wl[::-1])
+    assert np.allclose(trapz_result, mW, rtol=1e-6, atol=0)
+    assert np.allclose(trapz(AT*dt, axis=1), mW, **k)
     
     z, f, t, AW, AT = r.get_results(data_type='dBm/nm', rep_rate=rr)
     wl = c_nmps/f
-    trapz = np.trapz(10**(0.1*AW)[:,::-1], axis=1, x=wl[::-1])
-    assert np.allclose(trapz, mW, rtol=1e-6, atol=0)
-    assert np.allclose(np.trapz(10**(0.1*AT)*dt, axis=1), mW, **k)
+    trapz_result = trapz(10**(0.1*AW)[:,::-1], axis=1, x=wl[::-1])
+    assert np.allclose(trapz_result, mW, rtol=1e-6, atol=0)
+    assert np.allclose(trapz(10**(0.1*AT)*dt, axis=1), mW, **k)
 
     # TODO: figure out why the "per nm" tests require higher tolerances
 

@@ -5,6 +5,12 @@ import scipy.fftpack as fft
 import scipy
 import matplotlib.pyplot as plt
 
+# NumPy 2.0 compatibility: use trapezoid if available, otherwise trapz
+if hasattr(np, 'trapezoid'):
+    trapz = np.trapezoid
+else:
+    trapz = np.trapz
+
 # speed of light in m/s and nm/ps
 c_mks = 299792458.0
 c_nmps = c_mks * 1e9 / 1e12
@@ -269,7 +275,7 @@ class Pulse:
     @property
     def epp(self):
         """Energy per pulse in Joules."""
-        return (self.dt_ps * 1e-12) * np.trapz(abs(self.at) ** 2)
+        return (self.dt_ps * 1e-12) * trapz(abs(self.at) ** 2)
 
     @epp.setter
     def epp(self, desired_epp_J):

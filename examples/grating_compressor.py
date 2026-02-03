@@ -22,7 +22,7 @@ comp = tools.TreacyCompressor(lines_per_mm=l_mm, littrow_wavelength_nm=centerWL)
 # and also in beta-units (ps^n) for the plots
 D_vals, S_vals = comp.calc_dispersion_D(centerWL, separation)
 beta2_ps2, beta3_ps3 = comp.calc_dispersion(centerWL, separation, order=[2, 3])
-
+print('Angle (deg): ', comp.g*180/np.pi)
 print("Separation (m):", separation)
 print("GDD (ps^2):", beta2_ps2)
 print("TOD (ps^3):", beta3_ps3)
