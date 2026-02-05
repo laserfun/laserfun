@@ -36,9 +36,9 @@ class Pulse:
         The shape of the pulse in the time domain. Options are:
 
         - sech, which produces a hyperbolic secant (sech) shaped pulse
-          ``A(t) = sqrt(power) * sech(t/T0)``, where ``T0=fwhm/1.76``
+          ``A(t) = sqrt(power) * sech(t/T0)``, where ``T0=fwhm/1.7627``
         - gaussian, which produces a Gaussian shaped pulse
-          ``A(t) = sqrt(power) * exp(-(t/T0)^2/2)``, where ``T0=fwhm/1.76``
+          ``A(t) = sqrt(power) * exp(-(t/T0)^2/2)``, where ``T0=fwhm/1.6651``
         - sinc, which uses a sin(x)/x (sinc) function
           ``A(t) = sqrt(power) * sin(t/T0)/(t/T0)``, were ``T0=fwhm/3.79``
 
@@ -99,12 +99,16 @@ class Pulse:
 
         if pulse_type == "sech":
             # from https://www.rp-photonics.com/sech2_shaped_pulses.html
-            self.at = np.sqrt(power) / np.cosh(self.t_ps / (fwhm_ps / 1.76))
+            # T0 = FWHM / (2 * arccosh(sqrt(2))) = FWHM / 1.7627...
+            sech_fwhm_factor = 2 * np.arccosh(np.sqrt(2))  # exact: 1.76274717...
+            self.at = np.sqrt(power) / np.cosh(self.t_ps / (fwhm_ps / sech_fwhm_factor))
 
         elif pulse_type == "gaussian":
             # from https://www.rp-photonics.com/gaussian_pulses.html
+            # For intensity FWHM: I(t) = exp(-4*ln(2) * t^2 / FWHM^2)
+            # Amplitude: A(t) = exp(-2*ln(2) * t^2 / FWHM^2)
             self.at = np.sqrt(power) * np.exp(
-                -2.77 * 0.5 * self.t_ps**2 / ((fwhm_ps) ** 2)
+                -2 * np.log(2) * self.t_ps**2 / (fwhm_ps ** 2)
             )
 
         elif pulse_type == "sinc":
