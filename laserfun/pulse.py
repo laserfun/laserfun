@@ -36,11 +36,11 @@ class Pulse:
         The shape of the pulse in the time domain. Options are:
 
         - sech, which produces a hyperbolic secant (sech) shaped pulse
-          ``A(t) = sqrt(power) * sech(t/T0)``, where ``T0=fwhm/1.7627``
+          ``A(t) = sqrt(power) * sech(t/T0)``, where ``T0 = fwhm / (2 * arccosh(sqrt(2)))`` ≈ ``fwhm / 1.763``
         - gaussian, which produces a Gaussian shaped pulse
-          ``A(t) = sqrt(power) * exp(-(t/T0)^2/2)``, where ``T0=fwhm/1.6651``
+          ``A(t) = sqrt(power) * exp(-(t/T0)^2/2)``, where ``T0 = fwhm / (2 * sqrt(2 * ln(2)))`` ≈ ``fwhm / 2.355``
         - sinc, which uses a sin(x)/x (sinc) function
-          ``A(t) = sqrt(power) * sin(t/T0)/(t/T0)``, were ``T0=fwhm/3.79``
+          ``A(t) = sqrt(power) * sin(t/T0)/(t/T0)``, where ``T0 ≈ fwhm / 2.783``
 
     center_wavelength_nm : float
         The center wavelength of the pulse in nm.
@@ -112,9 +112,16 @@ class Pulse:
             )
 
         elif pulse_type == "sinc":
-            T0_ps = fwhm_ps / 3.7909885  # previously: T0_ps = FWHM_ps/3.7909885
+            # For intensity FWHM of sin(t/T0)/(t/T0):
+            # sin(x)/x = 1/sqrt(2) => x ≈ 1.39156
+            # FWHM = 2 * x * T0 ≈ 2.78311 * T0
+            # So T0 = FWHM / 2.78311...
+            sinc_fwhm_factor = 2.78311475647
             # numpy.sinc is sin(pi*x)/(pi*x), so we divide by pi
-            self.at = np.sqrt(power) * np.sinc(self.t_ps / ((fwhm_ps / 2.783) * np.pi))
+            # We want sin(t/T0)/(t/T0).
+            # np.sinc(t / (T0 * pi)) = sin(t/T0) / (t/T0)
+            T0 = fwhm_ps / sinc_fwhm_factor
+            self.at = np.sqrt(power) * np.sinc(self.t_ps / (T0 * np.pi))
 
         else:
             raise ValueError("Pulse type not recognized.")
