@@ -29,6 +29,7 @@ def NLSE(
     shock: bool = True,
     integrator: str = "lsoda",
     print_status: bool = True,
+    max_steps: int = 10000,
 ):
     """Propagate an laser pulse through a fiber according to the NLSE.
 
@@ -84,7 +85,7 @@ def NLSE(
         Selects the integrator that will be passes to scipy.integrate.ode.
         options are 'lsoda' (default), 'vode', 'dopri5', 'dopri853'.
         'lsoda' is a good option, and seemed fastest in early tests.
-        I think 'dopri5' and 'dopri853' are simpler Runge-Kutta methods,
+        'dopri5' and 'dopri853' are simpler Runge-Kutta methods,
         and they seem to take longer for the same result.
         'vode' didn't seem to produce good results with "method='adams'", but
         things werereasonable with "method='bdf'"
@@ -93,15 +94,17 @@ def NLSE(
     print_status : boolean
          This determines if the propagation status will be printed. Default
          is True.
+    max_steps : int
+        Maximum number of internal steps the integrator is allowed to take between
+        specified output points. Default is 10000. Increase this if you encounter
+        integrator errors (e.g. "Excess work done").
 
     Returns
     -------
     results : PulseData object
         This object contains all of the results. Use
-        ``z, f, t, AW, AT = results.get_results()``
-        to unpack the z-coordinates, frequency grid, time grid, amplitude at
-        each z-position in the freuqency domain, and amplitude at each
-        z-position in the time domain.
+        results.get_results() or results.get_results_wavelength() to access
+        the data.
     """
     # get the pulse info from the pulse object:
     t = pulse.t_ps  # time array in picoseconds
@@ -181,8 +184,28 @@ def NLSE(
     z = linspace(0, flength, nsaves)  # select output z points
     aw = ifft(at.astype("complex128"))  # ensure integrator knows it's complex
 
+    # intialize array for results:
+    AW = np.zeros((z.size, aw.size), dtype="complex128")
+    AW[0] = aw  # store initial pulse as first row
+
+    # Handling for 0-length fiber (or effectively 0) to avoid integrator crash
+    if flength <= 1e-15:  # significantly smaller than a wavelength
+        # Short-circuit: just fill results with initial pulse
+        for i in range(1, len(z)):
+            AW[i] = aw
+        
+        # Skip integration loop
+        AT = np.zeros_like(AW)
+        for i in range(len(z)):
+            AT[i, :] = fft(AW[i])
+            AW[i, :] = fftshift(AW[i])
+
+        pulse_out = pulse.create_cloned_pulse()
+        pulse_out.at = AT[-1]
+        return PulseData(z, AW, AT, pulse, pulse_out, fiber)
+
     # set up the integrator:
-    r = complex_ode(rhs).set_integrator(integrator, atol=atol, rtol=rtol)
+    r = complex_ode(rhs).set_integrator(integrator, atol=atol, rtol=rtol, nsteps=max_steps)
     r.set_initial_value(aw, z[0])
 
     # intialize array for results:
@@ -199,7 +222,7 @@ def NLSE(
                 % ((zi / z[-1]) * 100, zi, time.time() - start_time)
             )
         if not r.successful():
-            raise Exception("Integrator failed! Check the input parameters.")
+            raise Exception(f"Integrator failed at z={zi:.4e} m! Try increasing max_steps (current={max_steps}), npts, time_window, or adjusting tolerances.")
 
         AW[count + 1] = r.integrate(zi)
 
