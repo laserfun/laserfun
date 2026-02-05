@@ -308,6 +308,133 @@ def test_compressor_phase_consistency():
     max_diff = np.max(np.abs(p1.it - p2.it)) / np.max(p1.it)
     assert max_diff < 1.0e-2, f"Pulse profile point-by-point mismatch: {max_diff:.6e}"
 
+def test_nlse_soliton_benchmarks():
+    """Test NLSE solver against analytical solutions.
+    
+    Benchmarks:
+    1. N=1 Soliton: Peak power should remain constant.
+    2. N=2 Soliton: Pulse shape should recover at soliton period (z0).
+    3. Pure Dispersion: Gaussian pulse broadens exactly as predicted.
+    4. Pure SPM: Temporal shape remains unchanged (only phase modulation).
+    """
+
+    # Common parameters
+    center_wavelength_nm = 1550
+    beta2_ps2_m = -0.020  # anomalous dispersion
+    gamma_W_m = 1.0
+    fwhm_ps = 0.1
+    # T0 is the 'natural' width parameter for sech (T0 = FWHM/1.763)
+    # or Gaussian (T0 = FWHM/1.665).
+    # For sech pulses, Peak Power P0 = |beta2|/ (gamma * T0^2)
+    # We can use the library's internal T0 via the pulse object if needed, 
+    # or calculate explicitly to be safe.
+    T0_ps_sech = fwhm_ps / 1.76274717
+    # Convert to SI units for power calc
+    beta2_s2_m = beta2_ps2_m * 1e-24
+    T0_s_sech = T0_ps_sech * 1e-12
+    
+    P0_N1 = np.abs(beta2_s2_m) / (gamma_W_m * T0_s_sech**2)
+    
+    # === 1. Fundamental Soliton (N=1) ===
+    # Energy per pulse: E = 2 * P0 * T0 for sech
+    epp_N1 = 2 * P0_N1 * T0_s_sech
+
+    pulse = lf.Pulse(pulse_type='sech', fwhm_ps=fwhm_ps, 
+                     center_wavelength_nm=center_wavelength_nm,
+                     time_window_ps=50 * fwhm_ps, npts=2**12, epp=epp_N1)
+    
+    fiber = lf.Fiber(length=0.05, center_wl_nm=center_wavelength_nm,
+                     dispersion=[beta2_ps2_m], gamma_W_m=gamma_W_m)
+    
+    # Run solver
+    results = lf.NLSE(pulse, fiber, nsaves=40, print_status=False,
+                      raman=False, shock=False)
+    
+    _, _, _, _, AT = results.get_results(data_type='intensity')
+    peak_powers = np.max(AT, axis=1)
+    peak_var = (np.max(peak_powers) - np.min(peak_powers)) / peak_powers[0]
+    
+    assert peak_var < 0.005, f"N=1 Soliton peak power variation is {peak_var*100:.2f}% (limit 0.5%)"
+
+
+    # === 2. Higher-Order Soliton (N=2) ===
+    # Returns to original shape at z = pi/2 * L_D
+    # Power scales as N^2, so P_N2 = 4 * P_N1
+    epp_N2 = 4 * epp_N1
+    L_D = (T0_s_sech**2) / np.abs(beta2_s2_m)
+    z_period = (np.pi / 2) * L_D
+
+    pulse2 = lf.Pulse(pulse_type='sech', fwhm_ps=fwhm_ps, 
+                      center_wavelength_nm=center_wavelength_nm,
+                      time_window_ps=50 * fwhm_ps, npts=2**12, epp=epp_N2)
+    
+    fiber2 = lf.Fiber(length=z_period, center_wl_nm=center_wavelength_nm,
+                      dispersion=[beta2_ps2_m], gamma_W_m=gamma_W_m)
+    
+    results2 = lf.NLSE(pulse2, fiber2, nsaves=40, print_status=False,
+                       raman=False, shock=False)
+    
+    _, _, _, _, AT2 = results2.get_results(data_type='intensity')
+    
+    # Check correlation between input and output shapes
+    corr = np.corrcoef(AT2[0], AT2[-1])[0, 1]
+    assert corr > 0.999, f"N=2 Soliton period recovery correlation is {corr:.5f} (limit >0.999)"
+
+
+    # === 3. Pure Dispersion (Gaussian) ===
+    # For Gaussian: Broadening factor V = sqrt(1 + (z/L_D)^2)
+    # L_D = T0^2 / |beta2|
+    # Note: For Gaussian, T0 = FWHM / (2*sqrt(ln(2))) approx FWHM/1.665
+    T0_ps_gauss = fwhm_ps / (2 * np.sqrt(np.log(2)))
+    T0_s_gauss = T0_ps_gauss * 1e-12
+    L_D_gauss = (T0_s_gauss**2) / np.abs(beta2_s2_m)
+    
+    pulse3 = lf.Pulse(pulse_type='gaussian', fwhm_ps=fwhm_ps, 
+                      center_wavelength_nm=center_wavelength_nm,
+                      time_window_ps=20, npts=2**12, epp=10e-12) # Energy arbitrary for linear
+    
+    fiber3 = lf.Fiber(length=5 * L_D_gauss, center_wl_nm=center_wavelength_nm,
+                      dispersion=[beta2_ps2_m], gamma_W_m=0) # Linear: gamma=0
+    
+    results3 = lf.NLSE(pulse3, fiber3, nsaves=40, print_status=False)
+    z, _, t, _, AT3 = results3.get_results(data_type='intensity')
+    
+    # Measure width at each step using second moment (RMS width) for robustness
+    # RMS width of Gaussian = T0 / sqrt(2)
+    # We will just compare relative broadening to theory
+    
+    def get_rms_width(t_axis, shape):
+        # Center the pulse
+        t_center = np.average(t_axis, weights=shape)
+        # Calculate RMS
+        return np.sqrt(np.average((t_axis - t_center)**2, weights=shape))
+
+    w0 = get_rms_width(t, AT3[0])
+    w_final = get_rms_width(t, AT3[-1])
+    
+    broadening_measured = w_final / w0
+    broadening_theory = np.sqrt(1 + (z[-1] / L_D_gauss)**2)
+    
+    err = np.abs(broadening_measured - broadening_theory) / broadening_theory
+    assert err < 0.005, f"Dispersion broadening error is {err*100:.2f}% (limit 0.5%)"
+
+
+    # === 4. Pure SPM (Self-Phase Modulation) ===
+    # Temporal intensity profile should remain unchanged
+    pulse4 = lf.Pulse(pulse_type='gaussian', fwhm_ps=fwhm_ps, 
+                      center_wavelength_nm=center_wavelength_nm,
+                      time_window_ps=15, npts=2**12, epp=100e-12)
+    
+    fiber4 = lf.Fiber(length=0.05, center_wl_nm=center_wavelength_nm,
+                      dispersion=[0], gamma_W_m=1.0) # Pure nonlinear: D=0
+    
+    results4 = lf.NLSE(pulse4, fiber4, nsaves=40, print_status=False,
+                       raman=False, shock=False)
+    
+    _, _, _, _, AT4 = results4.get_results(data_type='intensity')
+    corr_spm = np.corrcoef(AT4[0], AT4[-1])[0, 1]
+    
+    assert corr_spm > 0.9999, f"SPM temporal profile correlation is {corr_spm:.6f} (limit >0.9999)"
 
 def test_examples():
     """Test that all examples can be imported and run without error."""
