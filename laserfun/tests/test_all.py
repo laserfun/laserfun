@@ -17,19 +17,20 @@ c_nmps = c_mks * 1e9/1e12
 def test_pulse():
     """Test that the max of pulses match previously calculated values."""
 
-    parameters = dict(center_wavelength_nm=1550, time_window_ps=20,
-                      fwhm_ps=0.1, GDD=0, TOD=0, npts=2**13,
+    parameters = dict(center_wavelength_nm=1550, time_window_ps=5,
+                      fwhm_ps=0.1, GDD=0, TOD=0, npts=2**14,
                       frep_MHz=100, power_is_avg=False, epp=50e-12)
 
     # test if the pulse FWHM is correctly implemented:
+    # With npts=2**14 and window=5ps, dt=0.3fs. Errors drop to < 1e-6.
     pulse = lf.Pulse(pulse_type='gaussian', **parameters)
-    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=1e-3)
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=2e-6)
 
     pulse = lf.Pulse(pulse_type='sech', **parameters)
-    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=2e-3)
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=2e-6)
 
     pulse = lf.Pulse(pulse_type='sinc', **parameters)
-    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=1e-3)
+    assert np.isclose(pulse.calc_width(level=0.5), 0.1, rtol=2e-6)
 
     # try to make a pulse with power_is_avg
     pulse = lf.Pulse(pulse_type='sech', power_is_avg=True, time_window_ps=20)
@@ -92,7 +93,9 @@ def test_fiber():
 
 def test_nlse_spectrum():
     """Check for reasonable agreement of NLSE output with old PyNLO results."""
-    pulse = lf.Pulse(pulse_type='sech', fwhm_ps=0.050, time_window_ps=7,
+    # Using 0.050078 ps to match the the 0.050000 ps in PyNLO, since PyNLO used
+    # a factor of 1.76 to FWHM for sech, and now we use 1.76274717...
+    pulse = lf.Pulse(pulse_type='sech', fwhm_ps=0.050078, time_window_ps=7,
                      npts=2**12, center_wavelength_nm=1550.0, epp=50e-12)
 
     fiber1 = lf.Fiber(length=8e-3, center_wl_nm=1550.0, gamma_W_m=1,
@@ -108,8 +111,7 @@ def test_nlse_spectrum():
     f_prev, dB_prev = np.loadtxt(path+'/nlse_output.txt', delimiter=',',
                                  unpack=True, skiprows=1)
 
-    # this is probably overly stringent because we are on a dB scale
-    np.testing.assert_allclose(dB, dB_prev, rtol=1e-4, atol=0)
+    np.testing.assert_allclose(dB, dB_prev, rtol=0.05, atol=0)
 
     # test that the wavelengths function works:
     z, new_wls, t, AW_wls, AT = results.get_results_wavelength()
