@@ -88,16 +88,22 @@ def NLSE(
         'dopri5' and 'dopri853' are simpler Runge-Kutta methods,
         and they seem to take longer for the same result.
         'vode' didn't seem to produce good results with "method='adams'", but
-        things werereasonable with "method='bdf'"
+        things were reasonable with "method='bdf'".
+        Note that 'lsoda' and 'vode' allocate a dense work array of
+        (2*npts)**2 doubles (about 2 GB at npts=2**13 and 137 GB at
+        npts=2**16), so use 'dopri5' or 'dopri853' for large grids.
         For more information, see:
         docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.ode.html
     print_status : boolean
          This determines if the propagation status will be printed. Default
          is True.
     max_steps : int
-        Maximum number of internal steps the integrator is allowed to take between
-        specified output points. Default is 10000. Increase this if you encounter
-        integrator errors (e.g. "Excess work done").
+        Maximum number of internal steps the integrator is allowed to take
+        between consecutive saved output points (i.e. per save interval, so
+        the total budget scales with nsaves). Default is 10000. If the budget
+        is exhausted a RuntimeError is raised rather than silently returning
+        a truncated propagation; increase max_steps or nsaves, or loosen the
+        tolerances.
 
     Returns
     -------
@@ -221,10 +227,17 @@ def NLSE(
                 "% 6.1f%% - %.3e m - %.1f seconds"
                 % ((zi / z[-1]) * 100, zi, time.time() - start_time)
             )
-        if not r.successful():
-            raise Exception(f"Integrator failed at z={zi:.4e} m! Try increasing max_steps (current={max_steps}), npts, time_window, or adjusting tolerances.")
-
         AW[count + 1] = r.integrate(zi)
+
+        # scipy only warns when the integrator fails (e.g. the max_steps budget
+        # is exhausted) and returns the field at an intermediate z, so check
+        # after every step to avoid silently returning a truncated propagation.
+        if not r.successful():
+            raise RuntimeError(
+                f"Integrator failed between z={z[count]:.4e} and z={zi:.4e} m! "
+                f"Try increasing max_steps (current={max_steps}) or nsaves, "
+                "or adjusting npts, time_window, or the tolerances."
+            )
 
     # process the output:
     AT = np.zeros_like(AW)
@@ -671,77 +684,74 @@ class PulseData:
 
     def calc_coherence(
         self,
-        pulse_in,
-        fiber,
         num_trials=5,
-        n_steps=100,
         random_seed=None,
         noise_type="one_photon_freq",
-        **nlse_kwargs
+        pulse_in=None,
+        fiber=None,
+        **nlse_kwargs,
     ):
-        """
-        This function runs several nlse simulations (given by num_trials), each
-        time adding random noise to the pulse. By comparing the electric fields
-        of the different pulses, an estimate of the coherence can be made.
+        r"""Estimate the first-order coherence of the supercontinuum.
+
+        Runs ``num_trials`` NLSE simulations, each seeded with a different
+        realization of random noise added to the input pulse (see
+        :meth:`laserfun.pulse.Pulse.add_noise`), and compares the output
+        fields to compute the modulus of the complex degree of first-order
+        coherence,
+
+        .. math:: |g_{12}(\lambda)| = \frac{|\langle A_i^*(\lambda) A_j(\lambda)
+           \rangle_{i \neq j}|}{\sqrt{\langle |A_i(\lambda)|^2 \rangle
+           \langle |A_j(\lambda)|^2 \rangle}}
+
+        as in Dudley, Genty & Coen, Rev. Mod. Phys. 78, 1135 (2006), Eq. 33.
 
         Parameters
         ----------
-        pulse_in : pulse object
-
         num_trials : int
-            this determines the number of trials to be run.
-
-        random_seed : int
-            this is the seed for the random noise generation. Default is None,
-            which does not set a seed for the random number generator, which
-            means that the numbers will be completely randomized.
-            Setting the seed to a number (i.e., random_seed=0) will still
-            generate random numbers for each trial, but the results from
-            calculate_coherence will be completely repeatable.
-
+            Number of independent noisy simulations to run.
+        random_seed : int or None
+            Seed for the noise generator. None gives a different result every
+            call; an int makes the calculation repeatable.
         noise_type : str
-            this specifies the method for including random noise onto the
-            pulse. See :func:`pynlo.light.PulseBase.Pulse.add_noise` for the
-            different methods.
+            Passed to :meth:`laserfun.pulse.Pulse.add_noise`.
+        pulse_in, fiber : Pulse, Fiber or None
+            Defaults to the pulse and fiber of this ``PulseData`` object.
+        **nlse_kwargs
+            Passed to :func:`NLSE` (e.g. ``nsaves``, ``atol``, ``rtol``,
+            ``raman``, ``integrator``, ``max_steps``). ``print_status``
+            defaults to False.
 
         Returns
         -------
-        g12W : 2D numpy array
-            This 2D array gives the g12 parameter as a function of propagation
-            distance and the frequency. g12 gives a measure of the coherence of
-            the pulse by comparing several different trials.
-
-        results : list of results for each trial
-            This is a list, where each item of the list contains (z_positions,
-            AW, AT, pulse_out), the results obtained from
-            :func:`pynlo.interactions.FourWaveMixing.SSFM.propagate`.
+        g12W : 2D numpy array, nsaves x npts
+            |g12| as a function of propagation distance (axis 0) and frequency
+            (axis 1, matching ``self.f_THz``).
+        results : list of PulseData
+            The individual noisy propagations.
         """
+        pulse_in = self.pulse_in if pulse_in is None else pulse_in
+        fiber = self.fiber if fiber is None else fiber
+        nlse_kwargs.setdefault("print_status", False)
+        rng = np.random.default_rng(random_seed)
 
         results = []
-        for num in range(0, num_trials):
-
+        for _ in range(num_trials):
             pulse = pulse_in.create_cloned_pulse()
-            pulse.add_noise(noise_type=noise_type)
+            pulse.add_noise(noise_type=noise_type, rng=rng)
+            results.append(NLSE(pulse, fiber, **nlse_kwargs))
 
-            y, AW, AT, pulse_out = self.propagate(
-                pulse_in=pulse, fiber=fiber, n_steps=n_steps
-            )
-
-            results.append((y, AW, AT, pulse_in, pulse_out))
-
-        for n1, (y, E1, AT, pulsein, pulseout) in enumerate(results):
-            for n2, (y, E2, AT, pulsein, pulseout) in enumerate(results):
-                if n1 == n2:
-                    continue  # don't compare the same trial
-
-                g12 = np.conj(E1) * E2 / np.sqrt(np.abs(E1) ** 2 * np.abs(E2) ** 2)
-                if "g12_stack" not in locals():
-                    g12_stack = g12
-                else:
-                    g12_stack = np.dstack((g12, g12_stack))
-
-        # print g12_stack.shape, g12_stack.transpose().shape
-        g12W = np.abs(np.mean(g12_stack, axis=2))
+        AW = np.array([r.AW for r in results])  # trials x nsaves x npts
+        n = AW.shape[0]
+        cross = np.zeros(AW.shape[1:], dtype="complex128")
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    cross += np.conj(AW[i]) * AW[j]
+        cross /= n * (n - 1)
+        power = np.mean(np.abs(AW) ** 2, axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            g12W = np.abs(cross) / power
+        g12W = np.nan_to_num(g12W)
 
         return g12W, results
 

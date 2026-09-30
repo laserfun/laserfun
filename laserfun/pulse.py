@@ -15,6 +15,9 @@ else:
 c_mks = 299792458.0
 c_nmps = c_mks * 1e9 / 1e12
 
+# Planck constant [J s]
+h_planck = 6.62607015e-34
+
 
 class Pulse:
     """Generate a new pulse object based on a pre-defined pulse shapes.
@@ -392,55 +395,74 @@ class Pulse:
         p.clone_pulse(self)
         return p
 
-    def add_noise(self, noise_type="sqrt_N_freq"):
-        """Add random intensity and phase noise to a pulse.
+    def photons_per_bin(self):
+        """Number of photons in each frequency bin of ``pulse.aw``.
+
+        ``abs(aw)**2 / df`` is the energy per bin in joules (see the ``aw``
+        docstring), so dividing by the photon energy ``h*nu`` gives the number
+        of photons per bin. Bins at non-positive frequencies return 0.
+        """
+        f_Hz = self.f_THz * 1e12
+        df_Hz = self.df_THz * 1e12
+        energy_per_bin = np.abs(self.aw) ** 2 / df_Hz  # [J]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            n = np.where(f_Hz > 0, energy_per_bin / (h_planck * np.abs(f_Hz)), 0.0)
+        return n
+
+    def add_noise(self, noise_type="one_photon_freq", rng=None):
+        """Add random noise to the pulse in the frequency domain.
+
+        A field carrying ``n`` photons in a frequency bin of width ``df`` has
+        ``abs(aw)**2 = n * h * nu * df`` (see ``photons_per_bin``). The noise
+        added here is circular complex Gaussian noise whose mean photon number
+        per bin is set by ``noise_type``. It is added only to bins at positive
+        frequencies.
 
         Parameters
         ----------
         noise_type : string
             The method used to add noise. The options are:
 
-            - ``sqrt_N_freq`` : adds noise to each bin in the frequency domain.
-              The average noise added is proportional to sqrt(N), and where N
-              is the number of photons in that frequency bin.
+            - ``one_photon_freq`` : adds, on average, one photon of noise to
+              each frequency bin. This is the usual "one photon per mode"
+              quantum-noise seed used in supercontinuum coherence calculations
+              (Dudley, Genty & Coen, Rev. Mod. Phys. 78, 1135 (2006)).
 
-            - ``one_photon_freq``` : which adds one photon of noise to each
-              frequency bin.
+            - ``half_photon_freq`` : adds half a photon per bin, which is the
+              vacuum-noise level in the symmetric-ordering (Wigner) convention.
+              With this seed the pulse-energy variance across realizations
+              equals the shot-noise value 1/N (N = photons per pulse).
+
+            - ``sqrt_N_freq`` : adds, on average, ``sqrt(N)`` photons of noise
+              to each frequency bin, where ``N`` is the number of photons
+              already in that bin. This is much larger than quantum noise and
+              is mainly useful for exploring the effect of a classical,
+              signal-dependent noise floor.
+
+        rng : numpy.random.Generator or None
+            Random number generator to use. If None, ``np.random.default_rng()``
+            is used. Pass a seeded generator for reproducible noise.
         """
-        # Get the number of photons/second in each frequency bin:
-        size_of_bins = self.df_THz * 1e-12  # Bin width in [Hz]
-        power_per_bin = np.abs(self.aw) ** 2 / size_of_bins  # [J*Hz]/[Hz] = [J]
+        if rng is None:
+            rng = np.random.default_rng()
 
-        h = 6.62607004e-34
+        f_Hz = self.f_THz * 1e12
+        df_Hz = self.df_THz * 1e12
+        photons = self.photons_per_bin()
 
-        photon_energy = h * self.f_THz * 1e-12  # h nu [J]
-        photons_per_bin = power_per_bin / photon_energy  # photons / second
-        photons_per_bin[photons_per_bin < 0] = 0  # must be positive.
-
-        # now generate some random intensity and phase arrays:
-        size = np.shape(self.aw)[0]
-        random_intensity = np.random.normal(size=size)
-        random_phase = np.random.uniform(size=size) * 2 * np.pi
-
-        if noise_type == "sqrt_N_freq":
-            # Gaussian noise with sqrt(photons_per_bin)
-            noise = (
-                random_intensity
-                * np.sqrt(photons_per_bin)
-                * photon_energy
-                * size_of_bins
-                * np.exp(1j * random_phase)
-            )
-
-        elif noise_type == "one_photon_freq":  # one photon per bin
-            noise = (
-                random_intensity
-                * photon_energy
-                * size_of_bins
-                * np.exp(1j * random_phase)
-            )
+        if noise_type == "one_photon_freq":
+            n_noise = np.ones_like(photons)
+        elif noise_type == "half_photon_freq":
+            n_noise = 0.5 * np.ones_like(photons)
+        elif noise_type == "sqrt_N_freq":
+            n_noise = np.sqrt(photons)
         else:
             raise ValueError("noise_type not recognized.")
+
+        # mean |noise|^2 = n_noise * h * nu * df  (i.e. n_noise photons per bin)
+        variance = np.where(f_Hz > 0, n_noise * h_planck * np.abs(f_Hz) * df_Hz, 0.0)
+        sigma = np.sqrt(variance / 2.0)  # per quadrature
+        noise = sigma * (rng.standard_normal(f_Hz.size) + 1j * rng.standard_normal(f_Hz.size))
 
         self.aw = self.aw + noise
 
